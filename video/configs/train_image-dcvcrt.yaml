@@ -1,0 +1,117 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+# log directory for per-process logs, can be omitted
+log_dir: logs
+
+# CUDA flags
+cuda:
+  # Allow CuDNN to select fastest convolution algorithm with performance benchmark (see torch.backends.cudnn.benchmark)
+  cudnn_benchmark: true
+
+# model configuration
+model:
+  # i-frame model
+  i_frame:
+    # model type: DMCI or DMCIRT
+    type: DMCI-6.0
+    N: 256
+    z_channel: 128
+    yuv420: true
+
+train:
+  # number of epochs
+  n_epoch: 95
+  # number of epochs between kept model/train state checkpoints
+  ckpt_per_epoch: 10
+  # automatically restart from last finished epoch
+  restart: true
+
+  # train dataset configuration
+  dataset:
+    # path to dataset
+    path: data/OpenVidHD/openvidhd_60k_train64/description.json
+    # output frame size (original frame is cropped to the size)
+    patch_size: [ 256, 256 ]
+    # number of worker processes to use for async data loading
+    n_workers: 4
+    # batch size (for all GPUs, must be divible by GPU count)
+    batch_size: 16
+
+  # max gradient norm
+  # grad_max_norm: 0.1
+  # dynamic per-parameter gradient norm tracking
+  grad_norm_tracker:
+    # initial value for gradient norm running mean
+    parameter_initial_norm: 0.1
+
+  skip_nonfinite_grad: true
+  # loss lambdas
+  loss_lambdas: [ 10, 2048 ]
+
+  # learning rate
+  learning_rate: 1.e-4
+  # loss type
+  loss_type: total_rdc_mse
+
+  # frequency of step metrics (loss, grad_norm etc.)
+  step_metric_frequency: 5
+
+  # frozen:
+  #   dataset.batch_size: 2
+  # frozen object allows to override schedule and freeze config values for debugging purposes
+  # best to use with --overrides="{ train.frozen: { dataset.batch_size: 2 } }"
+
+  # training schedule
+  schedule:
+    - { epoch: 5, learning_rate: 2.e-4 }
+    - { epoch: 35, learning_rate: 5.e-5 }
+    - { epoch: 40, learning_rate: 1.e-5, ckpt_per_epoch: 0 }
+    - { epoch: 45, learning_rate: 2.e-4 }
+    - { epoch: 50, learning_rate: 5.e-5 }
+    - { epoch: 55, learning_rate: 1.e-5 }
+    - { epoch: 60, learning_rate: 2.e-4 }
+    - { epoch: 65, learning_rate: 5.e-5 }
+    - { epoch: 70, learning_rate: 1.e-5 }
+    - { epoch: 80, learning_rate: 5.e-5 }
+    - { epoch: 85, learning_rate: 1.e-5 }
+    - { epoch: 90, learning_rate: 1.e-6 }
+
+# validation (benchmark) test configuration
+benchmark_test:
+  VCD_640x360_30fps_40s48f:
+    # test config (historically relative to the working directory)
+    config: ./test_cfg/VCD_640x360_30fps_40s48f.json
+    # root path to frame data, relative to data_mount (optional if root path is test config folder)
+    data_path: data/VCD/yuv/640x360_30fps
+    # list of q-indices to test
+    i_frame_q_index_list: [ 0, 21, 42, 63 ]
+    # limit number of frames in sequence
+    max_n_frames: 1
+    frame_type: all
+    # (optional) list of q-indices for p-frame model (must be of the same length as i_frame_q_index_list)
+    anchor: benchmark_test/anchor/vcd/640x360_30fps/dcvcrt_with_iframe_metrics_VCD_640x360_30fps_40s48f.json
+
+    # calc MS-SSIM score
+    calc_ssim: True
+    # encode bit stream or only estimate it
+    encode_bit_stream: true
+    # use decoder to produce decoded image
+    # use_decoder: false
+    # also calc bits estimates when encoding bit stream
+    calc_bits_estimates: true
+
+    # metrics to log to AzureML
+    log_metrics:
+      - i_frame_bpp
+      - i_frame_bpp_estimate
+      - i_frame_psnr
+      - i_frame_msssim
+
+    # do not test from the beginning
+    test_interval: 0
+
+    schedule:
+      # start testing at epoch 40
+      - { epoch: 40, test_interval: 5 }
+      - { epoch: 85, test_interval: 1 }

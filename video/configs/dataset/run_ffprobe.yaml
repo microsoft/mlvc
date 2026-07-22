@@ -1,0 +1,11 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+log_dir: logs
+
+ffpobe:
+  process_count: 0
+  source_dir: data/videos
+  video_list: videos.txt
+  output_dir: meta
+  output_frames: false

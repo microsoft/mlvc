@@ -1,0 +1,20 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+sequence_builder:
+  # Number of weak frames to split scene
+  weak_frame_limit: 5
+  # Scene break condition
+  scene_break_condition: "`optic_flow.d_90` > 40"
+  # Weak frame condition
+  weak_frame_condition: "(`optic_flow.d_90` < 2) or (`luma.rgb_std` < 0.02) or (`luma.y_max` < 0.1)"
+  # Sequence length
+  sequence_length: 64
+  # Number of sequences to generate
+  n_sequences: 60_000
+  # Patch size
+  patch_width: 512
+  patch_height: 512
+  # scale factor probabilities
+  scale_factors:
+    1: 1

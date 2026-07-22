@@ -1,0 +1,49 @@
+{
+    "root_path": "/home/sdb/ML-codec-dataset/YUV/",
+    "test_classes": {
+        "HEVC_B": {
+            "test": 1,
+            "base_path": "HEVC_B",
+            "src_type": "yuv420",
+            "sequences": {
+                "BQTerrace_1920x1080_60.yuv":       {"width": 1920, "height": 1080, "frames": 96, "intra_period": 96},
+                "BasketballDrive_1920x1080_50.yuv": {"width": 1920, "height": 1080, "frames": 96, "intra_period": 96},
+                "Cactus_1920x1080_50.yuv":          {"width": 1920, "height": 1080, "frames": 96, "intra_period": 96},
+                "Kimono1_1920x1080_24.yuv":         {"width": 1920, "height": 1080, "frames": 96, "intra_period": 96},
+                "ParkScene_1920x1080_24.yuv":       {"width": 1920, "height": 1080, "frames": 96, "intra_period": 96}
+            }
+        },
+        "HEVC_E": {
+            "test": 1,
+            "base_path": "HEVC_E",
+            "src_type": "yuv420",
+            "sequences": {
+                "FourPeople_1280x720_60.yuv":       {"width": 1280, "height": 720, "frames": 96, "intra_period": 96},
+                "Johnny_1280x720_60.yuv":           {"width": 1280, "height": 720, "frames": 96, "intra_period": 96},
+                "KristenAndSara_1280x720_60.yuv":   {"width": 1280, "height": 720, "frames": 96, "intra_period": 96}
+            }
+        },
+        "HEVC_C": {
+            "test": 1,
+            "base_path": "HEVC_C",
+            "src_type": "yuv420",
+            "sequences": {
+                "BQMall_832x480_60.yuv":            {"width": 832, "height": 480, "frames": 96, "intra_period": 96},
+                "BasketballDrill_832x480_50.yuv":   {"width": 832, "height": 480, "frames": 96, "intra_period": 96},
+                "PartyScene_832x480_50.yuv":        {"width": 832, "height": 480, "frames": 96, "intra_period": 96},
+                "RaceHorses_832x480_30.yuv":        {"width": 832, "height": 480, "frames": 96, "intra_period": 96}
+            }
+        },
+        "HEVC_D": {
+            "test": 1,
+            "base_path": "HEVC_D",
+            "src_type": "yuv420",
+            "sequences": {
+                "BasketballPass_416x240_50.yuv":    {"width": 416, "height": 240, "frames": 96, "intra_period": 96},
+                "BlowingBubbles_416x240_50.yuv":    {"width": 416, "height": 240, "frames": 96, "intra_period": 96},
+                "BQSquare_416x240_60.yuv":          {"width": 416, "height": 240, "frames": 96, "intra_period": 96},
+                "RaceHorses_416x240_30.yuv":        {"width": 416, "height": 240, "frames": 96, "intra_period": 96}
+            }
+        }
+    }
+}

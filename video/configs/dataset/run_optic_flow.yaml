@@ -1,0 +1,38 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+log_dir: logs
+
+model:
+  optic_flow:
+    type: src.models.spynet.ME_Spynet
+    params:
+      com_1x: 3
+      com_2x: 3
+      com_4x: 0
+      com_8x: 0
+      out_2x: False
+    ckpt_path: me_spynet.pth.tar
+    ckpt_module_prefix: optic_flow
+
+optic_flow:
+  dataset:
+    clip_folder: data/videos
+    clip_meta: clip_meta.json
+    n_workers: 6
+    batch_tensor_size: 0x10000000 # 256Mb
+
+  # output path relative to save_dir
+  output_path: metrics
+
+  # bbox RGB brightness threshold
+  black_threshold: 0.1
+
+  # quantile levels
+  quantiles: [ 10, 50, 90, 95, 98, 99 ]
+
+  # List of metrics blocks to skip when updating pre-computed metrics
+  # skipped_metrics: [optic_flow]
+
+  # update pre-computed metrics rather than starting from scratch
+  # merge_metrics_from: <path-to-precomputed-metrics>

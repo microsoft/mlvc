@@ -1,0 +1,38 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+log_dir: logs
+seed: 0
+torch:
+  use_deterministic_algorithms: true
+
+model:
+  auxiliary:
+    path: pretrained/
+    config:
+      perceptual:
+        base_model: vgg16
+        normalize_input: true
+        use_lpips_aggregation: true
+        use_lpips_weights: true
+      deqa_score:
+        ckpt_name: DeQA-Score-Mix3
+
+benchmark_metrics:
+  VCD_1280x720_30fps:
+    config: ./test_cfg/VCD_640x360_30fps_40s48f.json
+    use_i_frame_model: true
+    p_frame_q_index_list: [22, 25, 28, 31, 34, 37, 42]
+    seq_id_regexp: (.*)_\d+x\d+_\d+fps[.]yuv
+    clip_folder: output_data/mp4/1280x720_30fps
+    clip_metrics: output_data/metrics_VCD-640x360_30fps.json
+    calc_psnr_rgb: true
+    calc_ssim: true
+    calc_ssim_rgb: true
+    calc_psnr_roi: true
+    calc_vif: true
+    calc_lpips: true
+    calc_deqa_score_rgb: true
+    deqa_max_num_frames: 30
+    intra_period: 0
+    verbose_json: true

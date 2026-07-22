@@ -1,0 +1,121 @@
+[project]
+name = "mlvc"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "torch==2.10.0",
+    "torchao",
+    # Data & utilities
+    "tqdm",
+    "tabulate",
+    "pandas",
+    "scipy",
+    "matplotlib",
+    "dataclasses-json",
+    # ONNX / model conversion
+    "onnx",
+    "onnxscript",
+    "onnxconverter_common",
+    "coremltools",
+    # Azure
+    "cryptography<=46.0.3", # Latest versions missing ARM64 Windows wheels
+    "azure-identity",
+    "azure-storage-blob",
+    "azure-ai-ml",
+    "azureml-mlflow",
+    "mlflow-skinny",
+    # Not available for ARM64 Windows
+    "lpips; sys_platform != 'win32' or platform_machine != 'ARM64'",
+    "opencv-python==4.11.0.86; sys_platform != 'win32' or platform_machine != 'ARM64'",
+    "sentencepiece; sys_platform != 'win32' or platform_machine != 'ARM64'",
+    "transformers==4.36.1; sys_platform != 'win32' or platform_machine != 'ARM64'",
+    "pyfacer; sys_platform != 'win32' or platform_machine != 'ARM64'",
+]
+
+[project.optional-dependencies]
+onnxruntime = ["onnxruntime"]
+onnxruntime-gpu = [
+    "onnxruntime-gpu; sys_platform == 'linux' or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
+onnxruntime-openvino = [
+    "onnxruntime-openvino==1.24.1; sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "openvino==2025.4.1; sys_platform == 'win32' and platform_machine == 'AMD64'",
+]
+onnxruntime-qnn = [
+    "onnxruntime-qnn==1.24.4; sys_platform == 'win32' and platform_machine == 'ARM64'",
+]
+onnxruntime-windowsml = [
+    "winrt-Windows.Foundation; sys_platform == 'win32'",
+    "winrt-Windows.ApplicationModel; sys_platform == 'win32'",
+    "wasdk-Microsoft.Windows.AI.MachineLearning==1.8.*; sys_platform == 'win32'",
+    "wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap==1.8.*; sys_platform == 'win32'",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pyright",
+    "ruff",
+    "pre-commit",
+    "pre-commit-uv",
+    "jupyterlab",
+    "python-dotenv",
+]
+
+[tool.uv]
+package = false
+conflicts = [
+    [
+        { extra = "onnxruntime" },
+        { extra = "onnxruntime-gpu" },
+        { extra = "onnxruntime-qnn" },
+        { extra = "onnxruntime-openvino" },
+        { extra = "onnxruntime-windowsml" },
+    ],
+]
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "sys_platform == 'win32' and platform_machine == 'ARM64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32' and platform_machine == 'AMD64'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'win32' and platform_machine != 'AMD64'" },
+]
+torchvision = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32' and platform_machine == 'AMD64'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'win32' and platform_machine != 'AMD64'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pyright]
+include = ["video"]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    ".venv",
+    "venv",
+    "video/src/vsr",
+    "video/src/metrics/deqa",
+    "video/src/models/legacy",
+    "video/src/utils/flow_tester.py",
+]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["video/src/vsr", "video/src/metrics/deqa"]

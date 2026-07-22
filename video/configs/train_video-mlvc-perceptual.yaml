@@ -1,0 +1,254 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+# Perceptual fine-tuning configuration for MLVC model.
+
+# log directory for per-process logs, can be omitted
+log_dir: logs
+
+# random seed: single value or sequence of values for each GPU
+# seed: 0
+
+# torch flags
+torch:
+  # use_deterministic_algorithms: true
+
+# CUDA flags
+cuda:
+  # Allow CuDNN to select fastest convolution algorithm with performance benchmark (see torch.backends.cudnn.benchmark)
+  cudnn_benchmark: true
+  # Allow CUDA to use TensorFloat32 for convolutions (see torch.backends.cudnn.allow_tf32)
+  # cudnn_allow_tf32: true
+  # Allow CUDA to use TensorFloat32 for matrix multiplication (see torch.backends.cuda.matmul.allow_tf32)
+  # matmul_allow_tf32: false
+
+# model configuration
+model:
+  i_frame:
+    type: DMCI-6.0
+    N: 256
+    z_channel: 128
+    yuv420: true
+    ckpt_path: pretrained/DMCI-6.0.pth.tar
+
+  p_frame:
+    type: DMC-6.1sb
+    yuv420: true
+    ckpt_path: pretrained/model_epo343.ckpt
+    activation: LeakyReLU
+    input_offset: -0.5
+    feature_channels: 128
+    spatial_prior_channels: 256
+    memory_activation: identity
+    zero_init_residual: true
+    chunk_mode: gated
+    ffn_gate_activation: ReLU1
+    chain_feature_adaptors: true
+
+  auxiliary:
+    path: pretrained/
+    config:
+      perceptual:
+        # Reference LPIPS
+        base_model: vgg16
+        normalize_input: true
+        use_lpips_aggregation: true
+        use_lpips_weights: true
+      segmentation:
+        base_model: farl
+      deqa_score:
+        ckpt_name: DeQA-Score-Mix3
+
+train:
+  # enable gradient checkpointing to reduce memory usage
+  use_backprop_checkpoints: false
+  # total number of training epochs
+  n_epoch: 384
+  # epoch to start from
+  start_epoch: 344
+  # path for initializing optimizer state
+  initial_state_path: pretrained/optimizer_epo343.ckpt
+  # number of epochs between kept model/train state checkpoints
+  ckpt_per_epoch: 4
+  # automatically restart from last finished epoch
+  restart: true
+
+  # train dataset configuration
+  dataset:
+    # path to dataset description
+    path: data/OpenVidHD/openvidhd_60k_train64/description.json
+    precomputed_masks_path: masks
+
+    # output frame size (original frame is cropped to the size)
+    patch_size: [ 256, 256 ]
+    # desired length per epoch
+    desired_length: 65000
+    # target resolution with sampling weights
+    target_resolution: 256
+    # resampling method
+    resampling_method: null
+    # max distance between consecutive frames
+    max_frame_distance: 6
+    # randomly flip frames
+    random_flip: true
+    # number of worker processes to use for async data loading
+    n_workers: 4
+
+    # number of frames in sequence
+    n_frames: 2
+    # batch size (for all GPUs, must be divible by GPU count)
+    batch_size: 16
+
+    # brightness augmentation
+    brightness_aug:
+      enabled: false
+      alpha_min: 1.0
+      alpha_max: 1.0
+      beta_min: 0.0
+      beta_max: 0.0
+      only_y_channel: true
+
+  learning_rate: 1.e-4
+  # max gradient norm for gradient clipping
+  grad_max_norm: 0.2
+  # max gradient norm for frame-to-frame gradients in cascade mode
+  frame_grad_max_norm: 1.
+  # lambda range for rate-distortion tradeoff
+  loss_lambdas: [ 1, 768 ]
+  # loss function type (see src/losses/codec.py for options)
+  loss_type: total_rdc_perceptual_roi_per_pixel
+  roi_bg_ratio: 0.5
+  p_roi: 0.125
+
+  distortion_loss_weight: 0.862
+  perceptual_loss_weight: 0.138
+
+  controller:
+    bpp_target: 0.125
+    active: false
+    freeze_lambdas: false
+    ## for step
+    gain: 1.e-2
+    at_step: true
+
+  # weight for rate loss term (0 = distortion only)
+  bpp_loss_weight: 0.
+  # zero gradients for quantization parameters when bpp_loss_weight is 0
+  clear_grad_for_y_q: true
+  # accumulate gradients across frames before optimizer step
+  cascade: false
+  # sample all 64 q-points
+  random_rate: True
+  # transfer weights at the beginning of epoch
+  transfer_weights: none
+
+  # per-frame distortion weights [frame_type_0, frame_type_1, frame_type_2]
+  distortion_weights: [1.09, 2.11, 1.51]
+
+  # frequency of step metrics (loss, grad_norm etc.)
+  step_metric_frequency: 5
+  # probability of replacing i-frame with gray frame
+  i_frame_dropout: 0.0
+
+  # frozen:
+  #   dataset.batch_size: 2
+  # frozen object allows to override schedule and freeze config values for debugging purposes
+  # best to use with --overrides="{ train.frozen: { dataset.batch_size: 2 } }"
+
+  # training schedule
+  schedule:
+    # stage 1
+    - { epoch: 8, dataset.n_frames: 3 }
+    - { epoch: 16, dataset.n_frames: 4}
+    - { epoch: 20, dataset.n_frames: 5}
+    - { epoch: 24, dataset.n_frames: 2, bpp_loss_weight: 1. }
+    - { epoch: 44, dataset.n_frames: 3 }
+    - { epoch: 64, dataset.n_frames: 4}
+    - { epoch: 88, dataset.n_frames: 6}
+    - epoch: 230
+      dataset:
+        brightness_aug:
+          enabled: true
+          alpha_min: 0.95
+          alpha_max: 1.05
+          beta_min: -0.05
+          beta_max: 0.05
+          only_y_channel: true
+    - epoch: 232
+      dataset.n_frames: 7
+      learning_rate: 5.e-5
+      cascade: true
+      distortion_weights: [0.52, 1.33, 0.83]
+
+    # stage 2: finetuning on long sequences
+    - epoch: 236
+      dataset:
+        target_resolution: 360
+        resampling_method: "bilinear/0.15 box/0.15 bicubic/0.35 lanczos/0.35"
+        desired_length: 7000
+        n_frames: 8
+        max_frame_distance: 1
+        batch_size: 8
+    - { epoch: 256, dataset.n_frames: 16 }
+    - { epoch: 276, dataset.n_frames: 24 }
+    - { epoch: 296, dataset.n_frames: 32 }
+
+    - { epoch: 300, i_frame_dropout: 0.5 }
+    - { epoch: 316, learning_rate: 5.e-6 }
+    - { epoch: 324, learning_rate: 5.e-5 }
+    - { epoch: 344, learning_rate: 5.e-5, controller.active: true }
+    - { epoch: 346, learning_rate: 5.e-6, controller.freeze_lambdas: true }
+    - { epoch: 352, learning_rate: 5.e-5 }
+    - { epoch: 372, learning_rate: 5.e-6 }
+
+# validation (benchmark) test configuration
+benchmark_test:
+  VCD_640x360_30fps_40s48f:
+    use_i_frame_model: true
+    # test config (relative to the working directory)
+    config: ./test_cfg/VCD_640x360_30fps_40s48f.json
+    # root path to frame data, relative to data_mount (optional if root path is test config folder)
+    data_path: data/VCD/yuv/640x360_30fps
+    # list of q-indices to test
+    i_frame_q_index_list: [ 21, 35, 49, 63 ]
+    # (optional) list of q-indices for p-frame model (must be of the same length as i_frame_q_index_list)
+    # p_frame_q_index_list: [ 21, 35, 49, 63 ]
+
+    calc_lpips: true
+    calc_psnr_roi: true
+    calc_ssim: true
+    # encode bit stream or only estimate it
+    encode_bit_stream: true
+    # also calc bits estimates when encoding bit stream
+    calc_bits_estimates: true
+    # calculate DeQA-Score
+    calc_deqa_score_rgb: true
+    deqa_max_num_frames: 30
+
+    # metrics to log to AzureML
+    log_metrics:
+      - p_frame_bpp
+      - p_frame_bpp_estimate
+      - p_frame_psnr
+      - p_frame_psnr_roi
+      - all_frame_deqa_score_rgb
+
+    # limit number of frames in sequence
+    # max_n_frames: 96
+
+    # period between i-frames
+    intra_period: 96
+    reset_period: 32
+
+    distortion_metrics: ["psnr", "psnr_roi"]
+    # anchor to compare BD-rate
+    anchor: benchmark_test/anchor/vcd/640x360_30fps/dcvcrt_with_iframe_metrics_VCD_640x360_30fps_40s48f.json  # DCVC-RT + DMCI-6.0
+
+    # do not test from the beginning
+    test_interval: 0
+
+    # schedule increasing intra_period and enabling BD-rate computation
+    schedule:
+      - { epoch: 49, test_interval: 5 }
+      - { epoch: 112, test_interval: 1 }
+      - { epoch: 300, use_i_frame_model: false }

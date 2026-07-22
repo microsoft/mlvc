@@ -1,0 +1,18 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+# log directory for per-process logs, can be omitted
+log_dir: logs
+
+# CUDA flags
+cuda:
+  # Allow CuDNN to select fastest convolution algorithm with performance benchmark (see torch.backends.cudnn.benchmark)
+  cudnn_benchmark: true
+
+# model configuration
+segmentation_model:
+  base_model: farl
+
+dataset:
+  batch_size: 1
+  path: data/description.json

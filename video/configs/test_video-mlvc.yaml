@@ -1,0 +1,92 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+# This config evaluates MLVC on VCD dataset at multiple resolutions.
+# BD-rate is calculated against HEVC-QSV baseline using PSNR, LPIPS, MS-SSIM, DeQA-Score.
+
+# Prerequisites:
+#  1. Download MLVC checkpoints (see README.md for instructions)
+#  2. Place checkpoints in `pretrained/` folder
+#  3. Download VCD dataset (see README.md for instructions)
+
+log_dir: logs
+
+seed: 0
+
+torch:
+  use_deterministic_algorithms: true
+
+model:
+  i_frame: {}
+
+  p_frame:
+    type: DMC-6.1sb
+    ckpt_path: pretrained/mlvc-psnr-v1.ckpt
+    yuv420: true
+    input_offset: -0.5
+    feature_channels: 128
+    spatial_prior_channels: 256
+    zero_init_residual: true
+    activation: LeakyReLU
+    memory_activation: identity
+    chunk_mode: gated
+    ffn_gate_activation: ReLU1
+    chain_feature_adaptors: true
+
+  # auxiliary models for perceptual metrics
+  auxiliary:
+    path: pretrained/
+    config:
+      perceptual:
+        base_model: vgg16
+      deqa_score:
+        ckpt_name: DeQA-Score-Mix3
+
+loss: { }
+train: { }
+
+_benchmark_defaults: &benchmark_defaults
+  frame_type: all
+  use_i_frame_model: false
+  p_frame_q_index_list: [0, 21, 42, 63]
+  max_batch_size: 8
+  verbose_json: true
+
+  # LTR, no feature reset
+  intra_period: 1024
+  reset_period: 0
+  ltr_period: 64
+  ltr_start_idx: 8
+  ltr_qp_shift: 8
+
+  # metrics to compute
+  calc_psnr_rgb: true
+  calc_ssim: true
+  calc_ssim_rgb: true
+  calc_lpips: true
+  calc_deqa_score_rgb: false
+  deqa_max_num_frames: 30
+
+  # calculate both the encoded and estimated bpp
+  encode_bit_stream: true
+  calc_bits_estimates: true
+
+  # BD-rate distortion metrics
+  distortion_metrics: ["psnr", "lpips", "msssim"]
+  # distortion_metrics: ["psnr", "lpips", "msssim", "deqa_score_rgb"]
+
+benchmark_test:
+  VCD-640x360_30fps:
+    <<: *benchmark_defaults
+    config: ~{data_mount}/data/VCD/yuv/640x360_30fps/VCD-640x360_30fps.json
+    anchor: benchmark_test/anchor/vcd/640x360_30fps/intel_hw_hevc-v1.json
+
+  VCD-960x540_30fps:
+    <<: *benchmark_defaults
+    config: ~{data_mount}/data/VCD/yuv/960x540_30fps/VCD-960x540_30fps.json
+    anchor: benchmark_test/anchor/vcd/960x540_30fps/intel_hw_hevc-v1.json
+
+  VCD-1280x720_30fps:
+    <<: *benchmark_defaults
+    config: ~{data_mount}/data/VCD/yuv/1280x720_30fps/VCD-1280x720_30fps.json
+    anchor: benchmark_test/anchor/vcd/1280x720_30fps/intel_hw_hevc-v1.json

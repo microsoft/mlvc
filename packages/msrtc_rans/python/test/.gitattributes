@@ -1,0 +1,2 @@
+# specify locally type of test data archives
+*.zip -text -filter merge=binary

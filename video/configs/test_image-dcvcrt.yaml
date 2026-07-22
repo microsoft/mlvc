@@ -1,0 +1,67 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+# This config evaluates DCVC-RT (CVPR 2025) image model on the first frames of the VCD dataset.
+
+# Prerequisites:
+#  1. Download DCVC-RT checkpoints from:
+#     https://github.com/microsoft/DCVC?tab=readme-ov-file#clipboard-dcvc-family
+#  2. Place checkpoints in `pretrained/` folder
+#  3. Download VCD dataset (see README.md for instructions)
+
+log_dir: logs
+
+seed: 0
+
+torch:
+  use_deterministic_algorithms: true
+
+model:
+  i_frame:
+    type: DMCI-6.0
+    N: 256
+    z_channel: 128
+    yuv420: true
+    ckpt_path: pretrained/DMCI-6.0.pth.tar
+
+  # auxiliary models for perceptual metrics
+  auxiliary:
+    path: pretrained/
+    config:
+      perceptual:
+        base_model: vgg16
+      deqa_score:
+        ckpt_name: DeQA-Score-Mix3
+
+loss: { }
+train: { }
+
+_benchmark_defaults: &benchmark_defaults
+  frame_type: all
+  max_n_frames: 1
+  use_i_frame_model: true
+  i_frame_q_index_list: [0, 21, 42, 63]
+  max_batch_size: 8
+  verbose_json: true
+
+  # metrics to compute
+  calc_psnr_rgb: true
+  calc_ssim: true
+  calc_ssim_rgb: true
+  calc_lpips: true
+  calc_deqa_score_rgb: false
+  deqa_max_num_frames: 1
+
+  # calculate both the encoded and estimated bpp
+  encode_bit_stream: true
+  calc_bits_estimates: true
+
+  # BD-rate distortion metrics
+  distortion_metrics: ["psnr"]
+
+benchmark_test:
+  VCD_640x360_30fps_40s48f:
+    <<: *benchmark_defaults
+    config: ./test_cfg/VCD_640x360_30fps_40s48f.json
+    data_path: data/VCD/yuv/640x360_30fps
+    anchor: benchmark_test/anchor/vcd/640x360_30fps/dcvcrt_with_iframe_metrics_VCD_640x360_30fps_40s48f.json

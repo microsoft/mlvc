@@ -1,0 +1,33 @@
+[build-system]
+build-backend = "scikit_build_core.build"
+requires = ["scikit-build-core>=0.8"]
+
+[project]
+name = "msrtc-rans"
+dynamic = ["version"]
+description = "rANS entropy coder implementation"
+author = "Microsoft"
+python_requires = ">=3.8"
+dependencies = [
+    "numpy>=1.22"
+]
+
+[tool.scikit-build]
+minimum-version = "0.8"
+cmake.version = ">=3.23"
+cmake.define.BUILD_PYTHON_MODULE = "ON"
+cmake.define.INSTALL_ONLY_PYTHON_MODULE = "ON"
+ninja.version = ">=1.5"
+wheel.packages = ["python/src/msrtc"]
+
+# override for editable installation and debugging
+cmake.build-type = "Release"
+build-dir = ""
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "CMakeLists.txt"
+regex = 'project\([^)]+ VERSION (?P<value>[0-9.]+)'
+
+[pytest]
+testpaths = "python/test"

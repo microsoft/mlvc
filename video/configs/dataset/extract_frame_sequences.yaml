@@ -1,0 +1,35 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+log_dir: logs
+# Fix random seed
+seed: [ 0 ]
+
+# number of processes to run in parallel
+process_count: 0
+
+frame_sequence_extractor:
+  # Clip dataset root folder
+  source_dir: data/videos
+
+  # CSV file with frame sequences
+  frame_sequences_csv: frame_sequences.csv
+  # range of rows to extract
+  # sequence_range: [0, 100]
+
+  compression:
+    # compression quality
+    quality: 90
+    # use lossless compression
+    lossless: false
+
+  # list of processed clips for bookkeeping and restarting, relative to save_dir
+  processed_clip_list: processed_clip_list.txt
+  # Enable automatic job restart
+  auto_restart: True
+
+  # list of clips processed by the previous job, relative to checkpoints mount
+  initial_processed_clip_list: ""
+
+  # Output folder relative to save_dir
+  output_dir: ~{output_dataset}

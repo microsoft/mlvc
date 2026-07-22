@@ -1,0 +1,22 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+# BasicVSR++ NTIRE compressed video enhancement (Track 3) -- Vimeo-MSRA 360p.
+# Same-resolution output (is_low_res_input=False, c128n25).
+log_dir: logs
+
+cuda:
+  cudnn_benchmark: true
+
+model:
+  weights_path: restoration_models/basicvsrpp/basicvsrpp_ntire_decompress_track3.pth
+  mid_channels: 128
+  num_blocks: 25
+  chunk_size: 32
+  overlap: 4
+
+dataset:
+  description_path: data/Vimeo-MSRA/vimeo_train32_360p_2/description.json
+
+output:
+  quality: 100

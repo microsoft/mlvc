@@ -1,0 +1,47 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+# log directory for per-process logs, can be omitted
+log_dir: logs
+
+# CUDA flags
+cuda:
+  # Allow CuDNN to select fastest convolution algorithm with performance benchmark (see torch.backends.cudnn.benchmark)
+  cudnn_benchmark: true
+  # Allow CUDA to use TensorFloat32 for convolutions (see torch.backends.cudnn.allow_tf32)
+  # cudnn_allow_tf32: true
+  # Allow CUDA to use TensorFloat32 for matrix multiplication (see torch.backends.cuda.matmul.allow_tf32)
+  # matmul_allow_tf32: false
+
+# model configuration
+model:
+  auxiliary:
+    path: pretrained/
+    config:
+      deqa_score:
+        ckpt_name: DeQA-Score-Mix3
+  optic_flow:
+    type: src.models.video_net.ME_Spynet
+    params:
+      com_1x: 3
+      com_2x: 3
+      com_4x: 0
+      com_8x: 0
+      out_2x: False
+    ckpt_path: me_spynet.pth.tar
+    ckpt_module_prefix: optic_flow
+    # quantile levels
+    quantiles: [ 10, 50, 90, 95, 98, 99 ]
+
+metrics:
+  deqa: true
+  optic_flow: true
+  texture_complexity: true
+  # FFT cutoff ratio (0-1), lower = only very low freq excluded
+  fft_cutoff_ratio: 0.25
+  # Target resolution for texture metrics (null to keep original)
+  texture_target_resolution: 360
+
+dataset:
+  batch_size: 1
+  path: data/description.json
