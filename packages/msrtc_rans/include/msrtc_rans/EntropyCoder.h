@@ -12,6 +12,7 @@
     #error This header is for C++ only
 #endif
 
+#include <cstdint>
 #include <memory>
 #include <system_error>
 
