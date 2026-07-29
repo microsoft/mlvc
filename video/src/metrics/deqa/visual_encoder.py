@@ -1,15 +1,34 @@
+# Adapted from DeQA-Score and mPLUG-Owl2, with portions derived from
+# Hugging Face Transformers. See the repository NOTICE for attribution
+# and license details.
 import math
 from typing import Optional, Tuple, Union
 
+from transformers.masking_utils import bidirectional_mask_function, eager_mask
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from transformers.modeling_utils import PreTrainedModel
-from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
+
+
+def prepare_bidirectional_attention_mask(attention_mask, dtype, device):
+    if attention_mask.dim() != 2:
+        raise ValueError(f"attention_mask must be 2D, got {attention_mask.dim()} dimensions")
+    mask = eager_mask(
+        batch_size=attention_mask.shape[0],
+        q_length=1,
+        kv_length=attention_mask.shape[1],
+        mask_function=bidirectional_mask_function,
+        attention_mask=attention_mask.to(torch.bool),
+        dtype=dtype,
+        allow_is_bidirectional_skip=False,
+        device=device,
+    )
+    return mask.masked_fill(mask != 0, -10000.0)
 
 
 def get_abs_pos(abs_pos, tgt_size):
@@ -307,7 +326,7 @@ class MplugOwlVisionEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -328,6 +347,7 @@ class MplugOwlVisionEncoder(nn.Module):
                     create_custom_forward(encoder_layer),
                     hidden_states,
                     attention_mask,
+                    use_reentrant=False,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -381,7 +401,7 @@ class MplugOwlVisionModel(PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -567,27 +587,8 @@ class MplugOwlVisualAbstractorAttention(nn.Module):
         super().__init__()
         self.attention = MplugOwlVisualAbstractorMultiHeadAttention(config)
         self.output = MplugOwlVisualAbstractorCrossOutput(config)
-        self.pruned_heads = set()
         self.norm1 = nn.LayerNorm(config.hidden_size)
         self.normk = nn.LayerNorm(config.hidden_size)
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.out_proj, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -684,13 +685,11 @@ class MplugOwlVisualAbstractorEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
-
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, output_attentions)
 
                     return custom_forward
 
@@ -701,6 +700,7 @@ class MplugOwlVisualAbstractorEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    use_reentrant=False,
                 )
             else:
                 layer_outputs = layer_module(
@@ -733,58 +733,28 @@ class MplugOwlVisualAbstractorModel(PreTrainedModel):
 
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    def get_extended_attention_mask(
+    def get_head_mask(
         self,
-        attention_mask: torch.Tensor,
-        input_shape: Tuple[int],
-        device: torch.device,
-    ) -> torch.Tensor:
-        """
-        Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
+        head_mask: Optional[torch.Tensor],
+        num_hidden_layers: int,
+        is_attention_chunked: bool = False,
+    ):
+        if head_mask is None:
+            return [None] * num_hidden_layers
+        head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+        if is_attention_chunked:
+            head_mask = head_mask.unsqueeze(-1)
+        return head_mask
 
-        Arguments:
-            attention_mask (`torch.Tensor`):
-                Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`Tuple[int]`):
-                The shape of the input to the model.
-            device: (`torch.device`):
-                The device of the input to the model.
-
-        Returns:
-            `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
-        """
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            # Provided a padding mask of dimensions [batch_size, seq_length]
-            # - the model is an encoder, so make the mask broadcastable to
-            #  [batch_size, num_heads, seq_length, seq_length]
-            extended_attention_mask = attention_mask[:, None, None, :]
-        else:
-            raise ValueError(
-                "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
-                    input_shape, attention_mask.shape
-                )
-            )
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        return extended_attention_mask
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+        if head_mask.dim() == 1:
+            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
+        elif head_mask.dim() == 2:
+            head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+        if head_mask.dim() != 5:
+            raise ValueError(f"head_mask must have 1, 2, or 5 dimensions, got {head_mask.dim()}")
+        return head_mask.to(dtype=self.dtype)
 
     def forward(
         self,
@@ -817,7 +787,7 @@ class MplugOwlVisualAbstractorModel(PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         query_embeds = self.query_embeds.repeat(encoder_hidden_states.shape[0], 1, 1)
         embedding_output = query_embeds
@@ -831,7 +801,11 @@ class MplugOwlVisualAbstractorModel(PreTrainedModel):
             attention_mask = torch.ones(
                 (query_embeds.shape[0], query_embeds.shape[1]), dtype=torch.long, device=query_embeds.device
             )
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask = prepare_bidirectional_attention_mask(
+            attention_mask,
+            self.dtype,
+            device,
+        )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -847,12 +821,23 @@ class MplugOwlVisualAbstractorModel(PreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
             if isinstance(encoder_attention_mask, list):
-                encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
+                encoder_extended_attention_mask = [
+                    prepare_bidirectional_attention_mask(mask, self.dtype, device)
+                    for mask in encoder_attention_mask
+                ]
             elif encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+                encoder_extended_attention_mask = prepare_bidirectional_attention_mask(
+                    encoder_attention_mask,
+                    self.dtype,
+                    device,
+                )
             else:
-                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+                encoder_extended_attention_mask = prepare_bidirectional_attention_mask(
+                    encoder_attention_mask,
+                    self.dtype,
+                    device,
+                )
         else:
             encoder_extended_attention_mask = None
 

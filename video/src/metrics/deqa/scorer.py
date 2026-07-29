@@ -53,6 +53,7 @@ class Scorer(nn.Module):
                 self.model.device)
             output_logits = self.model(
                 input_ids=self.input_ids.repeat(image_tensor.shape[0], 1),
-                images=image_tensor
+                images=image_tensor,
+                use_cache=False,
             )["logits"][:, -1, self.preferential_ids_]
             return torch.softmax(output_logits, -1) @ self.weight_tensor

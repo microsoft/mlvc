@@ -2,6 +2,9 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+#
+# `LlamaConfig` and `_rope_scaling_validation` are adapted from Hugging Face
+# Transformers. See the repository NOTICE for attribution and license details.
 import os
 from typing import Union
 from transformers.configuration_utils import PretrainedConfig, logger
@@ -115,6 +118,7 @@ class LlamaConfig(PretrainedConfig):
         attention_dropout=0.0,
         **kwargs,
     ):
+        self._deqa_rope_scaling = kwargs.pop("_deqa_rope_scaling", rope_scaling)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -133,7 +137,6 @@ class LlamaConfig(PretrainedConfig):
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
@@ -146,20 +149,28 @@ class LlamaConfig(PretrainedConfig):
             **kwargs,
         )
 
+    def to_dict(self):
+        output = super().to_dict()
+        output["rope_scaling"] = output.pop(
+            "_deqa_rope_scaling",
+            self._deqa_rope_scaling,
+        )
+        output.pop("rope_parameters", None)
+        return output
+
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
         """
-        if self.rope_scaling is None:
+        if self._deqa_rope_scaling is None:
             return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
+        if not isinstance(self._deqa_rope_scaling, dict) or len(self._deqa_rope_scaling) != 2:
             raise ValueError(
                 "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                f"got {self._deqa_rope_scaling}"
             )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_factor = self.rope_scaling.get("factor", None)
+        rope_scaling_type = self._deqa_rope_scaling.get("type", None)
+        rope_scaling_factor = self._deqa_rope_scaling.get("factor", None)
         if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
             raise ValueError(
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"

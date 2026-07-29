@@ -28,7 +28,7 @@ dependencies = [
     "lpips; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "opencv-python==4.11.0.86; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "sentencepiece; sys_platform != 'win32' or platform_machine != 'ARM64'",
-    "transformers==4.36.1; sys_platform != 'win32' or platform_machine != 'ARM64'",
+    "transformers>=5.14.1,<6; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "pyfacer; sys_platform != 'win32' or platform_machine != 'ARM64'",
 ]
 
