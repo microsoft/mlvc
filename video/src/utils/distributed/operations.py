@@ -70,7 +70,7 @@ def run_distributed(
 ):
     if task_processor is not None:
         if list_processor is not None:
-            raise ValueError("Can not have both task and list processors sepcified")
+            raise ValueError("Can not have both task and list processors specified")
 
         list_processor = functools.partial(run_task_list, task_processor=task_processor)
 

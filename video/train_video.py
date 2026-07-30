@@ -169,7 +169,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         if pretrain_path is None:
             return False
 
-        logging.info(f"loading {part_name} weigths from {pretrain_path}")
+        logging.info(f"loading {part_name} weights from {pretrain_path}")
         state = get_state_dict(pretrain_path)
         for prefix in getattr(model, module_names_attr):
             module = getattr(model, prefix)
@@ -662,7 +662,7 @@ class TrainVideoApp(BaseTrainVideoApp):
                 self.get_config_by_path("train.optic_flow_loss_path"), default_source="checkpoints_mount"
             )
 
-            logging.info(f"loading optic flow loss weigths from {optic_flow_path}")
+            logging.info(f"loading optic flow loss weights from {optic_flow_path}")
 
             from src.models.spynet import ME_Spynet
 

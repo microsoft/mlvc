@@ -3,7 +3,7 @@
 
 /**
  * @file msrtc_rans/entropy_coder.h
- * @brief Defines msrtc_rans::EntropyEncoder and msrtc_rans::EntropyDecoder - entropy encoder and decoder using rANS alogirthm
+ * @brief Defines msrtc_rans::EntropyEncoder and msrtc_rans::EntropyDecoder - entropy encoder and decoder using rANS algorithm
  */
 
 #pragma once

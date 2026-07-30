@@ -307,7 +307,7 @@ class RDTester:
 
         base_method_name = args.base_method
         assert len(args.log_paths) % 2 == 0, (
-            "log paths shoud include both the method name and the corresponding log path"
+            "log paths should include both the method name and the corresponding log path"
         )
         log_paths = {}
         for i in range(len(args.log_paths) // 2):

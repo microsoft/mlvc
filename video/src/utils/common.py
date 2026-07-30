@@ -242,7 +242,7 @@ def dump_json(obj, fid, float_digits=-1, **kwargs):
     # noinspection PyShadowingNames
     def inner(*args, **kwargs):
         args = list(args)
-        # fifth argument is float formater which we will replace
+        # fifth argument is float formatter which we will replace
         args[4] = lambda o: format(o, ".%df" % float_digits)
         return of(*args, **kwargs)
 
@@ -279,7 +279,7 @@ def configure_logging(
 
 def multiprocessing_init():
     """
-    Multiprocessing intitialization
+    Multiprocessing initialization
     """
     import torch.multiprocessing as mp
 
