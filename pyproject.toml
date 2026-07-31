@@ -18,7 +18,7 @@ dependencies = [
     "onnxconverter_common",
     "coremltools",
     # Azure
-    "cryptography<=46.0.3", # Latest versions missing ARM64 Windows wheels
+    "cryptography<=48.0.1", # Latest versions missing ARM64 Windows wheels
     "azure-identity",
     "azure-storage-blob",
     "azure-ai-ml",
