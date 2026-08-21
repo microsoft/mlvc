@@ -42,7 +42,7 @@ python run_ffprobe.py --config=configs/dataset/run_ffprobe.yaml
 ```commandline
 python build_clip_meta.py <path to run_ffprobe results> clip_meta.json
 ```
-4. Modify `clip_folder` and verify that the path to `clip_meta.json` is correct in the config used for the `run_optic_flow.py` script (see an example in `configs/dataset/run_optic_flow.yaml`). Then, run optical flow calculation and collect per-clip statistics:
+4. Download the pretrained [SpyNet checkpoint](https://mlvideopub.blob.core.windows.net/mlvc/models/me_spynet.pth.tar) as `me_spynet.pth.tar`, matching `model.optic_flow.ckpt_path` in `configs/dataset/run_optic_flow.yaml`. Its SHA-256 checksum is `a6f69e0f299ee9271b9e22c78472cf12be947d029b765bf2282f9bd03c5e35ab`. Modify `clip_folder` and verify that the path to `clip_meta.json` is correct in the config. Then, run optical flow calculation and collect per-clip statistics:
 ```commandline
 python run_optic_flow.py --config=configs/dataset/run_optic_flow.yaml
 ```
