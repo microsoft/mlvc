@@ -492,6 +492,8 @@ class RDTester:
         if self.plot_scheme == "combined" and len(names) > 7:
             warnings.warn("plotting in combined mode with more than 7 datasets/sequences is not supported")
         else:
+            if self.plot_path is None:
+                raise ValueError("plot_path is required when plotting RD curves")
             matplotlib_plt(
                 names,
                 frame_data,
@@ -501,6 +503,8 @@ class RDTester:
             )
 
     def plot_output(self, frame_data, distortion_metric, max_num_bitrate):
+        if self.output_plot_data is None:
+            raise ValueError("output_plot_data is required when saving plot data")
         try:
             import pandas as pd  # pylint: disable=C0415
         except ImportError:

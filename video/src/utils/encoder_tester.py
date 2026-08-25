@@ -179,6 +179,8 @@ def use_ltr_features(dpb, params, intra_idx, qp_shift):
     else:
         prev_feature = dpb["ltr_feature"] if dpb is not None else None
         if should_use_ltr_features(intra_idx, params.ltr_start_idx, params.ltr_period):
+            if dpb is None:
+                raise RuntimeError("LTR features require an initialized DPB")
             dpb["ref_feature"] = dpb["ltr_feature"]
             qp_shift = params.ltr_qp_shift
 
