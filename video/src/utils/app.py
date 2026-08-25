@@ -237,7 +237,7 @@ class BaseApp(abc.ABC):
         if len(aux_mount_names) != len(aux_mount_list):
             raise ValueError(
                 f"Number of auxiliary mount point names ({len(aux_mount_names)})"
-                f" does not match number of auxiliary mounts {len(cmd_args.aux_mount)}"
+                f" does not match number of auxiliary mounts {len(aux_mount_list)}"
             )
 
         config["aux_mounts"] = dict(zip(aux_mount_names, aux_mount_list))
@@ -279,10 +279,10 @@ class BaseApp(abc.ABC):
         if not isinstance(overrides_config, dict):
             raise ValueError("Overrides configuration must be a dictionary")
 
-        overrides_config = apply_type_annotations_to_config(overrides_config)
-
         for name, value in overrides_config.items():
-            set_config_value_by_path(config, name, value)
+            if not isinstance(name, str):
+                raise ValueError("Override configuration keys must be strings")
+            set_config_value_by_path(config, name, apply_type_annotations_to_config(value))
 
     def _add_args_from_config(
         self,

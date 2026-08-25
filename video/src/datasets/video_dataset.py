@@ -503,7 +503,11 @@ class FastVideoFolder(Dataset):
         target_data_arr = None
         target_futures = None
 
-        if self.target_seqs is not None:
+        target_seqs = self.target_seqs
+        target_root_folder_path = self.target_root_folder_path
+        if target_seqs is not None:
+            if target_root_folder_path is None:
+                raise RuntimeError("Target root folder is not initialized")
             use_target = self.target_prob == 1.0 or random.random() < self.target_prob
         else:
             use_target = False
@@ -543,9 +547,11 @@ class FastVideoFolder(Dataset):
                 ]
 
             if use_target:
+                if target_seqs is None:
+                    raise RuntimeError("Target sequences are not initialized")
                 target_futures = self._submit_seq_frame_futures(
-                    seq=self.target_seqs[index],
-                    seq_root_folder_path=self.target_root_folder_path,
+                    seq=target_seqs[index],
+                    seq_root_folder_path=target_root_folder_path,
                     img_indexes=img_indexes,
                     augparams=augparams,
                 )
@@ -573,18 +579,20 @@ class FastVideoFolder(Dataset):
 
         result = {"video": video_tensor}
 
-        if self.target_seqs is not None:
+        if target_seqs is not None:
             if not use_target:
                 result["target_video"] = video_tensor
             else:
                 if self.thread_count <= 1:
                     target_data_arr = self._load_seq_frames_sync(
-                        seq=self.target_seqs[index],
-                        seq_root_folder_path=self.target_root_folder_path,
+                        seq=target_seqs[index],
+                        seq_root_folder_path=target_root_folder_path,
                         img_indexes=img_indexes,
                         augparams=augparams,
                     )
                 else:
+                    if target_futures is None:
+                        raise RuntimeError("Target frame futures are not initialized")
                     target_data_arr = self._collect_frame_futures(target_futures)
                 target_tensor = torch.as_tensor(target_data_arr.astype(np.float32) / 255.0)
                 if pad_mask is not None:

@@ -52,14 +52,17 @@ onnxruntime-windowsml = [
 ]
 
 [dependency-groups]
-dev = [
+ci = [
     "pytest",
     "pyright",
     "ruff",
     "pre-commit",
-    "pre-commit-uv",
-    "jupyterlab",
+    "pre-commit-hooks",
     "python-dotenv",
+]
+dev = [
+    { include-group = "ci" },
+    "jupyterlab",
 ]
 
 [tool.uv]
@@ -102,6 +105,7 @@ explicit = true
 
 [tool.pyright]
 include = ["video"]
+extraPaths = ["packages/msrtc_rans/python/src"]
 exclude = [
     "**/node_modules",
     "**/__pycache__",
@@ -112,7 +116,9 @@ exclude = [
     "video/src/metrics/deqa",
     "video/src/models/legacy",
     "video/src/utils/flow_tester.py",
+    "packages/msrtc_rans/python/src",
 ]
+ignore = ["packages/msrtc_rans/python/src"]
 pythonVersion = "3.12"
 typeCheckingMode = "basic"
 
