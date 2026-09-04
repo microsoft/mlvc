@@ -1,0 +1,61 @@
+default_install_hook_types: [pre-commit]
+repos:
+  - repo: local
+    hooks:
+      - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: uv run --frozen --no-sync trailing-whitespace-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
+        minimum_pre_commit_version: 3.2.0
+      - id: end-of-file-fixer
+        name: fix end of files
+        entry: uv run --frozen --no-sync end-of-file-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
+        minimum_pre_commit_version: 3.2.0
+      - id: check-yaml
+        name: check yaml
+        entry: uv run --frozen --no-sync check-yaml
+        language: system
+        types: [yaml]
+      - id: check-toml
+        name: check toml
+        entry: uv run --frozen --no-sync check-toml
+        language: system
+        types: [toml]
+      - id: check-added-large-files
+        name: check for added large files
+        entry: uv run --frozen --no-sync check-added-large-files
+        language: system
+        stages: [pre-commit, pre-push, manual]
+        minimum_pre_commit_version: 3.2.0
+        exclude: '^uv\.lock$'
+      - id: check-merge-conflict
+        name: check for merge conflicts
+        entry: uv run --frozen --no-sync check-merge-conflict
+        language: system
+        types: [text]
+      - id: debug-statements
+        name: debug statements (python)
+        entry: uv run --frozen --no-sync debug-statement-hook
+        language: system
+        types: [python]
+
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen --no-sync ruff check --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        args: [--fix]
+        require_serial: true
+        minimum_pre_commit_version: 2.9.2
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen --no-sync ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+        minimum_pre_commit_version: 2.9.2

@@ -8,13 +8,13 @@ from pathlib import Path
 from .types import ModelType, TargetDevice
 
 
-DEFAULT_JOB_OUTPUTS_DIR = os.environ.get("VIDEO_JOB_OUTPUTS_DIR", "~/datasets/job-outputs/")
-DEFAULT_TEST_DATA_DIR = os.environ.get("VIDEO_TEST_DATA_DIR", "~/datasets/test-set/")
+DEFAULT_JOB_OUTPUTS_DIR = os.environ.get("VIDEO_JOB_OUTPUTS_DIR", "~/mlvc/job-outputs/")
+DEFAULT_TEST_DATA_DIR = os.environ.get("VIDEO_TEST_DATA_DIR", "~/mlvc/data/VCD/")
 DEFAULT_EXPORT_DIR = str((Path(__file__).parent.parent / "output" / "models").resolve())
 DEFAULT_BUNDLE_DIR = str((Path(__file__).parent.parent / "output" / "model_bundles").resolve())
 
-DEFAULT_MODEL_WIDTH = 640
-DEFAULT_MODEL_HEIGHT = 368
+DEFAULT_MODEL_WIDTH = 960
+DEFAULT_MODEL_HEIGHT = 544
 
 DEFAULT_CONVERT_FRAME_COUNT = 48
 DEFAULT_BENCHMARK_FRAME_COUNT = 300
@@ -24,7 +24,7 @@ DEFAULT_METRICS_BIT_DEPTH = 32
 DEFAULT_TEST_CONFIG_PATH = "yuv/960x540_30fps/VCD-960x540_30fps.json"
 DEFAULT_NUM_CLIPS_LIMIT = 5
 DEFAULT_TEST_Q_INDEX_LIST = [0, 21, 42, 63]
-DEFAULT_ANCHOR_PATH = "benchmark_test/anchor/VCD_960x540_30fps/intel_hw_hevc_lp.json"
+DEFAULT_ANCHOR_PATH = "benchmark_test/anchor/vcd/960x540_30fps/intel_hw_hevc-v1.json"
 
 DEFAULT_MODEL_TYPE = ModelType.ONNX
 if sys.platform == "darwin":

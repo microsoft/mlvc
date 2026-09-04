@@ -39,13 +39,9 @@ uv sync --extra onnxruntime-windowsml    # Windows ML (GPU or NPU)
 uv pip install packages/msrtc_rans
 ```
 6. Install pre-commit hooks (for development)
-
-Copy `.pre-commit-config-example.yaml` to `.pre-commit-config.yaml` before installing the hooks.
-
 ```bash
 uv run pre-commit install
 ```
-7. Activate virtual environment from .venv directory or use `uv run ...` instead of `python ...` (preferred)
 
 ## Minimal Example
 
@@ -71,8 +67,9 @@ Run commands from the `video/` directory.
 
 ### Directory layout
 
-Paths in dataset configurations are resolved relative to `--data_mount`.
-Model checkpoints, anchors, and training outputs are resolved relative to `--checkpoints_mount`.
+Training dataset paths are resolved relative to `--data_mount`.
+Model checkpoints, auxiliary model files, anchors, and relative `--save_dir` paths are resolved relative to `--checkpoints_mount`.
+Relative benchmark `config` paths such as `./test_cfg/...` are resolved from the working directory, so run the commands below from `video/`.
 
 ```text
 ~/mlvc/
@@ -103,7 +100,7 @@ Follow instructions [here](https://stackoverflow.com/questions/66693808/where-ca
 ##### VCD
 
 The original VCD dataset is available from the [VCD repository](https://github.com/microsoft/VCD).
-Prepared versions used by this project are available at: [360p](https://mlvideopub.blob.core.windows.net/mlvc/VCD/640x360_30fps.tar), [540p](https://mlvideopub.blob.core.windows.net/mlvc/VCD/960x540_30fps.tar) and [720p](https://mlvideopub.blob.core.windows.net/mlvc/VCD/1280x720_30fps.tar).
+Prepared versions used by this project are available at: [360p](https://mlvideopub.blob.core.windows.net/mlvc/datasets/VCD/640x360_30fps.tar), [540p](https://mlvideopub.blob.core.windows.net/mlvc/datasets/VCD/960x540_30fps.tar) and [720p](https://mlvideopub.blob.core.windows.net/mlvc/datasets/VCD/1280x720_30fps.tar).
 
 Extract the required resolutions under:
 
@@ -118,7 +115,16 @@ Extract the required resolutions under:
 
 Anchor files contain results from a reference codec and are used to calculate BD-rate.
 We provide `intel_hw_hevc` anchors for VCD [360p](https://mlvideopub.blob.core.windows.net/mlvc/anchors/vcd/640x360_30fps/intel_hw_hevc-v1.json), [540p](https://mlvideopub.blob.core.windows.net/mlvc/anchors/vcd/960x540_30fps/intel_hw_hevc-v1.json), and [720p](https://mlvideopub.blob.core.windows.net/mlvc/anchors/vcd/1280x720_30fps/intel_hw_hevc-v1.json), and `DCVC-RT` anchors for [96-frame HEVC sequences](https://mlvideopub.blob.core.windows.net/mlvc/anchors/hevc/dcvcrt_with_iframe_metrics_recommended_yuv420.json) and [48-frame VCD-s1 360p sequences](https://mlvideopub.blob.core.windows.net/mlvc/anchors/vcd/640x360_30fps/dcvcrt_with_iframe_metrics_VCD_640x360_30fps_40s48f.json).
-Download anchors to the corresponding path under `~/mlvc/job-outputs/benchmark_test/anchor/`.
+Keep the downloaded filenames and place the anchors under:
+
+```text
+~/mlvc/job-outputs/benchmark_test/anchor/
+├── hevc/
+└── vcd/
+  ├── 640x360_30fps/
+  ├── 960x540_30fps/
+  └── 1280x720_30fps/
+```
 
 ### Prepare auxiliary models
 
@@ -146,7 +152,7 @@ Download the face detector [mobilenet0.25_Final.pth](https://github.com/biubug6/
 ### Train I-Frame Model
 
 ```bash
-python train_image.py \
+uv run train_image.py \
   --config configs/train_image-dcvcrt.yaml \
   --data_mount ~/mlvc \
   --checkpoints_mount ~/mlvc/job-outputs \
@@ -156,7 +162,7 @@ python train_image.py \
 ### Train P-Frame Model
 
 ```bash
-python train_video.py \
+uv run train_video.py \
   --config configs/train_video-mlvc.yaml \
   --data_mount ~/mlvc \
   --checkpoints_mount ~/mlvc/job-outputs \
@@ -169,8 +175,10 @@ Perceptual fine-tuning configuration is shown in [train_video-mlvc-perceptual.ya
 
 ### Run Evaluation
 
+To evaluate the pre-trained MLVC PSNR model, download [`mlvc-psnr-v1.ckpt`](https://mlvideopub.blob.core.windows.net/mlvc/models/mlvc-psnr-v1.ckpt) to `~/mlvc/job-outputs/pretrained/`, then run:
+
 ```bash
-python train_video.py \
+uv run train_video.py \
   --config configs/test_video-mlvc.yaml \
   --validate \
   --data_mount ~/mlvc \
@@ -186,93 +194,113 @@ python train_video.py \
 ### Compute metrics for encoded videos
 
 ```bash
-python compute_benchmark_metrics.py --config configs/compute_benchmark_metrics.yaml
+uv run compute_benchmark_metrics.py --config configs/compute_benchmark_metrics.yaml
 ```
 
 ### Compute optical flow, DeQA and texture complexity for training/validation frame sequences
 
 ```bash
-python calculate_frame_sequence_metrics.py --config configs/dataset/calculate_frame_sequence_metrics.yaml
+uv run calculate_frame_sequence_metrics.py --config configs/dataset/calculate_frame_sequence_metrics.yaml
 ```
 
 ## Model conversion
 
+Run commands from the `video/` directory.
+
 ### Prerequisites
 
-By default, local job outputs and test data directories are located at `~/mlvc/job-outputs/` and `~/mlvc/test-set/`, respectively. To override these locations, use the `VIDEO_JOB_OUTPUTS_DIR` and `TEST_DATA_DIR` environment variables or provide the `--job-outputs-dir` and `--test-data-dir` command line arguments to the `convert.py` script.
+Download and extract the [540p VCD data](#vcd), which is used during export validation and testing.
 
-Model defaults are read from `model_configs.yaml`.
-Use `model_configs_example.yaml` as a template and configure an absolute local weights_path and a weights_version.
+To convert a pre-trained model, download its checkpoint from the [Models](#models) table to `~/mlvc/job-outputs/pretrained/`, keeping its filename.
+
+Copy [model_configs_example.yaml](video/conversion/_full_model/model_configs_example.yaml) to `video/conversion/_full_model/model_configs.yaml`. The template defines standard MLVC and MLVC-S entries with PSNR checkpoints selected by default. Update an entry's `weights_path` and `weights_version` to use its perceptual checkpoint.
+
+Model conversion uses the directory layout above by default. If needed, override the job outputs and VCD data directories with `VIDEO_JOB_OUTPUTS_DIR` and `VIDEO_TEST_DATA_DIR`, or with `--job-outputs-dir` and `--test-data-dir`.
 
 ### Model export
 
-Getting started:
+As an example, export the standard MLVC PSNR model (`mlvc-psnr-v1.ckpt`) at the default `960x544` input size, using the default model format and target device for your platform:
 
 ```bash
-python convert.py export --model-version dmc61sbr_reglu --model-type onnx --weights-path ~/mlvc/job-outputs/pretrained/mlvc-psnr-v1.ckpt
+uv run convert.py export --model-version dmc61sbr_reglu
 ```
 
-Examples:
-
+More examples:
 
 ```bash
-# Example 1: Export with different model type and target device. Note that running inference for CoreML and Intel models requires the NPU.
-python convert.py export --model-version dmc61sbr_reglu --model-type coreml --target-device apple
-python convert.py export --model-version dmc61sbr_reglu --model-type onnx --target-device intel
-python convert.py export --model-version dmc61sbr_reglu --model-type onnx --target-device qualcomm
+# Example 1: Export for different model formats and target devices
+uv run convert.py export --model-version dmc61sbr_reglu --model-type coreml --target-device apple
+uv run convert.py export --model-version dmc61sbr_reglu --model-type onnx --target-device intel
+uv run convert.py export --model-version dmc61sbr_reglu --model-type onnx --target-device qualcomm
+uv run convert.py export --model-version dmc61sbr_reglu --model-type onnx --target-device generic
 
-# Example 2: Export model with custom size (the model is fully convolutional, but NPUs expect fixed sizes)
-python convert.py export --model-version dmc61sbr_reglu --model-width 640 --model-height 368
-python convert.py export --model-version dmc61sbr_reglu --model-width 320 --model-height 192
+# Example 2: Export at fixed input sizes (both dimensions must be multiples of 16)
+uv run convert.py export --model-version dmc61sbr_reglu --model-width 640 --model-height 368
+uv run convert.py export --model-version dmc61sbr_reglu --model-width 320 --model-height 192
 
-# Example 3: Override the checkpoint configured for the model
-python convert.py export --model-version dmc61sbr_reglu --weights-path /absolute/path/to/mlvc-psnr-v1.ckpt
+# Example 3: Override the configured checkpoint and its version label
+uv run convert.py export --model-version dmc61sbr_reglu \
+  --weights-path /absolute/path/to/mlvc-perceptual-v1.ckpt \
+  --weights-version perceptual_v1
 
 # Example 4: Enable model benchmark after conversion
-python convert.py export --model-version dmc61sbr_reglu --benchmark
+uv run convert.py export --model-version dmc61sbr_reglu --benchmark
 
 # Other options
-python convert.py export --help
+uv run convert.py export --help
 ```
 
-### Model testing (examples based on CoreML)
+### Model testing (examples for Apple devices)
+
+The following examples validate, profile, benchmark, and evaluate the default `960x544` CoreML export. Adjust `--model-path` when using a different model, format, or input size. Full validation also requires the [540p anchor](#anchors).
 
 ```bash
 # Example 1: Run conversion validation test
-python convert.py test --model-path ./output/models/dmc61sbr_reglu-local/coreml-apple/640x368 validate_conversion
+uv run convert.py test --model-path ./output/models/dmc61sbr_reglu-psnr_v1/coreml-apple/960x544 validate_conversion
 
 # Example 2: Run profile
-python convert.py test --model-path ./output/models/dmc61sbr_reglu-local/coreml-apple/640x368 profile
+uv run convert.py test --model-path ./output/models/dmc61sbr_reglu-psnr_v1/coreml-apple/960x544 profile
 
 # Example 3: Benchmark (uses NPU by default)
-python convert.py test --model-path ./output/models/dmc61sbr_reglu-local/coreml-apple/640x368 benchmark
+uv run convert.py test --model-path ./output/models/dmc61sbr_reglu-psnr_v1/coreml-apple/960x544 benchmark
 
 # Example 4: Benchmark on GPU
-python convert.py test --model-path ./output/models/dmc61sbr_reglu-local/coreml-apple/640x368 --coreml-compute-units gpu benchmark
+uv run convert.py test --model-path ./output/models/dmc61sbr_reglu-psnr_v1/coreml-apple/960x544 --coreml-compute-units gpu benchmark
 
 # Example 5: Run validation test (calculate BD-rate against anchor)
-python convert.py test --model-path ./output/models/dmc61sbr_reglu-local/coreml-apple/640x368 run_validation_test
+uv run convert.py test --model-path ./output/models/dmc61sbr_reglu-psnr_v1/coreml-apple/960x544 run_validation_test
 
 # Example 6: Run validation test and save MLVC bitstream and reconstructed YUV frames (for model debug data, add --save-debug-data)
-python convert.py test --model-path ./output/models/dmc61sbr_reglu-local/coreml-apple/640x368 run_validation_test --save-output-data --save-yuv
+uv run convert.py test --model-path ./output/models/dmc61sbr_reglu-psnr_v1/coreml-apple/960x544 run_validation_test --save-output-data --save-yuv
 ```
 
 ### Model bundles
 
+Model bundles package the configured model at the default input sizes (`960x544`, `640x368`, `432x240`, and `320x192`) into a versioned output directory and `.tar` archive. These defaults require corresponding VCD clips at 540p, 360p, 240p, and 180p under `~/mlvc/data/VCD/yuv/`.
+
 ```bash
-# Example: Prepare a model bundle
-python convert.py bundle --model-version dmc61sbr_reglu
-python convert.py bundle --model-version dmc61sbr_reglu --skip-if-exists  # Skip conversion of individual models, if exists
-python convert.py bundle --model-version dmc61sbr_reglu --mlvc-version v0.1
-python convert.py bundle --model-version dmc61sbr_reglu --model-type coreml --target-device apple
-python convert.py bundle --model-version dmc61sbr_reglu --model-type onnx --target-device intel
-python convert.py bundle --model-version dmc61sbr_reglu --model-type onnx --target-device qualcomm
+# Example 1: Prepare a CoreML bundle for Apple devices
+uv run convert.py bundle --model-version dmc61sbr_reglu --mlvc-version v0.1 --model-type coreml --target-device apple
 
-# Example: Test 640x368 from the model bundle
-python convert.py test --model-path ./output/model_bundles/dmc61sbr_reglu-local-coreml-apple-v0.0 --model-id 640x368 validate_conversion
+# Example 2: Reuse existing individual model exports
+uv run convert.py bundle --model-version dmc61sbr_reglu --mlvc-version v0.1 --model-type coreml --target-device apple --skip-if-exists
 
-# Help
-python convert.py bundle --help
+# Example 3: Prepare ONNX bundles for different target devices
+uv run convert.py bundle --model-version dmc61sbr_reglu --mlvc-version v0.1 --model-type onnx --target-device generic
+uv run convert.py bundle --model-version dmc61sbr_reglu --mlvc-version v0.1 --model-type onnx --target-device intel
+uv run convert.py bundle --model-version dmc61sbr_reglu --mlvc-version v0.1 --model-type onnx --target-device qualcomm
+
+# Example 4: Prepare an MLVC-S perceptual CoreML bundle
+uv run convert.py bundle --model-version dmc61sbr_mini_reglu --mlvc-version v0.1 \
+  --weights-path pretrained/mlvc-s-perceptual-v1.ckpt \
+  --weights-version perceptual_v1 \
+  --model-type coreml --target-device apple
+
+# Example 5: Test 640x368 from the model bundle
+uv run convert.py test --model-path ./output/model_bundles/dmc61sbr_reglu-psnr_v1-coreml-apple-v0.1 --model-id 640x368 validate_conversion
+
+# Other options
+uv run convert.py bundle --help
 ```
 
 ### Development
@@ -280,7 +308,7 @@ python convert.py bundle --help
 #### Run unit tests
 
 ```bash
-python -m pytest tests/test_conversion.py --disable-warnings
+uv run python -m pytest tests/test_conversion.py --disable-warnings
 ```
 
 ## Citation

@@ -529,7 +529,7 @@ class split_gated_conv(AbstractGraphPass):
                 return False
 
         block.remove_ops([conv_op, split_op])
-        print(f"split_gated_conv: split conv '{conv_op.name}' ({out_channels} ch) into {num_splits} ({chunk} ch each)")
+        # print(f"split_gated_conv: split conv '{conv_op.name}' ({out_channels} ch) into {num_splits} ({chunk} ch each)")
         return True
 
     @block_context_manager

@@ -429,16 +429,16 @@ def _add_export_arguments(parser: argparse.ArgumentParser):
         help="Version of the model to convert",
     )
     group_model.add_argument(
-        "--weights-version",
-        type=str,
-        default=None,
-        help="Version of the model weights",
-    )
-    group_model.add_argument(
         "--weights-path",
         type=str,
         default=None,
         help="Path to the model weights",
+    )
+    group_model.add_argument(
+        "--weights-version",
+        type=str,
+        default=None,
+        help="Version of the model weights",
     )
     parser.add_argument(
         "--iframe-period",
@@ -629,6 +629,18 @@ def _add_bundle_arguments(parser: argparse.ArgumentParser):
         choices=get_available_models(),
         help="Version of the model to convert",
     )
+    group_bundle_arguments.add_argument(
+        "--weights-path",
+        type=str,
+        default=None,
+        help="Path to the model weights",
+    )
+    group_bundle_arguments.add_argument(
+        "--weights-version",
+        type=str,
+        default=None,
+        help="Version of the model weights",
+    )
 
     group_bundle_arguments.add_argument(
         "--model-input-sizes",
@@ -714,8 +726,8 @@ def _export_model(
     model_type: ModelType,
     target_device: TargetDevice | None,
     model_version: str,
-    weights_version: str | None,
     weights_path: str | None,
+    weights_version: str | None,
     iframe_period: int | None,
     reset_period: int | None,
     ltr_start_idx: int | None,
@@ -734,8 +746,8 @@ def _export_model(
 
     full_model = full_model_factory(
         model_version=model_version,
-        weights_version=weights_version,
         weights_path=weights_path,
+        weights_version=weights_version,
         iframe_period=iframe_period,
         reset_period=reset_period,
         ltr_start_idx=ltr_start_idx,
@@ -821,16 +833,24 @@ def _test_model(
 def _bundle(
     mlvc_version: MlvcVersion,
     model_version: str,
+    weights_path: str | None,
+    weights_version: str | None,
     model_type: ModelType,
     target_device: TargetDevice | None,
     model_input_sizes: list[tuple[int, int]],
     job_outputs_dir: Path | str,
+    test_data_dir: Path | str,
     skip_if_exists: bool = False,
     **kwargs,
 ):
 
     # Full model
-    full_model = full_model_factory(model_version=model_version, job_outputs_path=job_outputs_dir)
+    full_model = full_model_factory(
+        model_version=model_version,
+        weights_path=weights_path,
+        weights_version=weights_version,
+        job_outputs_path=job_outputs_dir,
+    )
 
     # Export models for all input sizes
     model_paths: list[Path | str] = []
@@ -844,6 +864,7 @@ def _bundle(
             model_type=model_type,
             target_device=target_device,
             skip_if_exists=skip_if_exists,
+            test_data_dir=test_data_dir,
         )
         model_path = exporter.run()
         model_paths.append(model_path)
@@ -918,6 +939,6 @@ if __name__ == "__main__":
             **args,
         )
     elif cmd == Command.BUNDLE:
-        _bundle(job_outputs_dir=job_outputs_dir, **args)
+        _bundle(job_outputs_dir=job_outputs_dir, test_data_dir=test_data_dir, **args)
     else:
         raise NotImplementedError(f"Command {cmd} not implemented")
