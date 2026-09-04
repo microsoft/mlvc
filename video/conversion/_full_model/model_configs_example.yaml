@@ -1,49 +1,22 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-# Model Configurations Example
-# ============================
-# Copy this file to model_configs.yaml and configure your weights paths.
+# Public Model Configurations
+# ===========================
+# Copy this file to model_configs.yaml.
 
 # -----------------------------------------------------------------------------
 # DMC 6.1SB models
 # -----------------------------------------------------------------------------
 
-dmc61sbr_lrelu:
-  module: ._dmc61sb_model
-  class: TraceableMLVC
-  weights_path: null  # TODO: Set path to your weights
-  weights_version: null  # TODO: Set version string
-  iframe_period: 128
-  reset_period: null
-  split_type: dmc61sbr_e1d1
-  params:
-    disable_feature_reset: true
-    depth_conv_block_params:
-      activation: LeakyReLU
-      zero_init_residual: true
-    feature_channels: 128
-    spatial_prior_channels: 256
-    input_offset: -0.5
-    memory_activation: identity
-
-dmc61sb_lrelu:
-  module: ._dmc61sb_model
-  class: TraceableMLVC
-  weights_path: null  # TODO: Set path to your weights
-  weights_version: null  # TODO: Set version string
-  iframe_period: 128
-  reset_period: 64
-  split_type: dmc61sb_e2d1
-  params:
-    depth_conv_block_params:
-      activation: LeakyReLU
-
 dmc61sbr_reglu:
   module: ._dmc61sb_model
   class: TraceableMLVC
+  # Perceptual alternative:
+  # weights_path: pretrained/mlvc-perceptual-v1.ckpt
+  # weights_version: perceptual_v1
   weights_path: pretrained/mlvc-psnr-v1.ckpt
-  weights_version: mlvc-psnr-v1
+  weights_version: psnr_v1
   iframe_period: 64
   reset_period: null
   split_type: dmc61sbr_e1d1
@@ -60,46 +33,37 @@ dmc61sbr_reglu:
     memory_activation: identity
     chain_feature_adaptors: true
 
-# -----------------------------------------------------------------------------
-# DMC 6.1S models
-# -----------------------------------------------------------------------------
-
-dmc61s:
-  module: ._dmc61s_model
+dmc61sbr_mini_reglu:
+  module: ._dmc61sb_model
   class: TraceableMLVC
-  weights_path: null
-  weights_version: null
-  iframe_period: 128
-  reset_period: 64
-  split_type: dmc61s_e2d1
-  params:
-    depth_conv_block_params:
-      activation: WSiLU
-
-dmc61sr_lrelu:
-  module: ._dmc61s_model
-  class: TraceableMLVC
-  weights_path: null
-  weights_version: null
-  iframe_period: 128
+  # Perceptual alternative:
+  # weights_path: pretrained/mlvc-s-perceptual-v1.ckpt
+  # weights_version: perceptual_v1
+  weights_path: pretrained/mlvc-s-psnr-v1.ckpt
+  weights_version: psnr_v1
+  iframe_period: 1024
   reset_period: null
-  split_type: dmc61sr_e1d1
+  ltr_start_idx: 8
+  ltr_period: 64
+  split_type: dmc61sbr_e1d1
   params:
     disable_feature_reset: true
     depth_conv_block_params:
       activation: LeakyReLU
-
-# -----------------------------------------------------------------------------
-# DMC 6.1 models
-# -----------------------------------------------------------------------------
-
-dmc61:
-  module: ._dmc61_model
-  class: TraceableMLVC
-  weights_path: null
-  weights_version: null
-  iframe_period: null
-  reset_period: 64
-  split_type: dmc61_e2d3
-  params:
-    activation: WSiLU
+      zero_init_residual: true
+      chunk_mode: gated
+      ffn_gate_activation: ReLU1
+    feature_channels: 48
+    spatial_prior_channels: 128
+    input_offset: -0.5
+    memory_activation: identity
+    recon_channels: 192
+    hidden_channels: 192
+    hyperprior_num_blocks: 2
+    y_scale_repeat: 4
+    z_channels: 48
+    y_channels: 48
+    chain_feature_adaptors: true
+    hyperprior_variant: mini
+    feature_extractor_num_conv1_layers: 1
+    feature_extractor_num_conv2_layers: 1

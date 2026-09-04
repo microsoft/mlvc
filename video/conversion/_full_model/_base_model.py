@@ -37,8 +37,7 @@ class BaseFullModel(torch.nn.Module):
             # QP mapping from 0-51 range to the model's QP range
             qp_mapping = None
             if self.get_qp_num() == 64:
-                qps = np.arange(52, dtype=float)
-                qp_mapping = np.clip(np.round((44.0 - qps) / 0.3), 0, 63).astype(int).tolist()
+                qp_mapping = _generate_qp_mapping()
 
             self._model_params = ModelParams(
                 model_version=model_version,
@@ -297,3 +296,18 @@ def get_mask_dual(size, dtype, device):
     mask_0 = torch.cat((m * m0, m * m1), dim=1)
     mask_1 = torch.cat((m * m1, m * m0), dim=1)
     return mask_0, mask_1
+
+
+def _generate_qp_mapping(
+    num_q_indices: int = 64,
+    num_qps: int = 51,
+    qp0: int = 18,
+    q_index0: int = 63,
+    qp1: int = 44,
+    q_index1: int = 8,
+) -> list[int]:
+    # QP (0-51) to Q index (0-63)
+    qps = np.arange(num_qps + 1, dtype=float)
+    slope = (q_index1 - q_index0) / (qp1 - qp0)
+    intercept = q_index0 - slope * qp0
+    return np.clip(np.round(slope * qps + intercept), 0, num_q_indices - 1).astype(int).tolist()

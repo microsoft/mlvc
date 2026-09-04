@@ -432,8 +432,6 @@ class ExporterParams:
     image_width: int
     image_height: int
     frame_count: int
-    output_path: str
-    output_name: str | None
     extra_params: dict[str, Any]
 
 

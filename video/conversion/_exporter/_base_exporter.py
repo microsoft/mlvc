@@ -229,8 +229,6 @@ class BaseExporter(ABC):
                     image_width=self._image_width,
                     image_height=self._image_height,
                     frame_count=self._frame_count,
-                    output_path=self._output_path.as_posix(),
-                    output_name=self._output_name,
                     extra_params={},
                 ),
             ),

@@ -650,5 +650,5 @@ class OnnxOptimizer:
         graph.node.remove(conv_node)
         for n in nodes_to_remove:
             graph.node.remove(n)
-        print(f"split_gated_conv: split Conv '{conv_node.name}' ({out_ch} ch) into {num_splits} ({chunk} ch each)")
+        # print(f"split_gated_conv: split Conv '{conv_node.name}' ({out_ch} ch) into {num_splits} ({chunk} ch each)")
         return True

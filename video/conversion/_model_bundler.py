@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+import os
+import gzip
 import onnx
 import shutil
 import hashlib
@@ -90,7 +92,7 @@ class BaseBundler(ABC):
             metadata_files[model_id] = Path(model_path) / "metadata.json"
             gaussian_pmf_files[model_id] = Path(model_path) / "gaussian_pmf.json"
             bit_estimator_pmf_files[model_id] = Path(model_path) / "bit_estimator_pmf.json"
-            for model_part_id in metadata.model_parts_metadata.keys():
+            for model_part_id in metadata.model_parts_metadata:
                 model_files[model_id, model_part_id] = Path(model_path) / f"{model_part_id.value}.{extension}"
 
             scale_decoder_file = self._find_scale_decoder_file(Path(model_path))
@@ -411,16 +413,46 @@ def _create_tar(
     if not directory_path.is_dir():
         raise ValueError(f"Not a directory: {directory_path}")
 
-    suffix = ".tar.gz" if gzip_compress else ".tar"
-    mode = "w:gz" if gzip_compress else "w"
-    archive_path = directory_path.parent / f"{directory_path.name}{suffix}"
-    with tarfile.open(archive_path, mode, format=tarfile.USTAR_FORMAT) as tar:
+    source_date_epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
+
+    def _normalize_tar_info(tar_info: tarfile.TarInfo) -> tarfile.TarInfo:
+        tar_info.uid = 0
+        tar_info.gid = 0
+        tar_info.uname = "root"
+        tar_info.gname = "root"
+        tar_info.mtime = source_date_epoch
+        if tar_info.isdir():
+            tar_info.mode = 0o755
+        elif tar_info.isfile():
+            tar_info.mode = 0o755 if tar_info.mode & 0o111 else 0o644
+        return tar_info
+
+    def _add_members(tar: tarfile.TarFile) -> None:
+        items = sorted(
+            directory_path.rglob("*"),
+            key=lambda item: item.relative_to(directory_path).as_posix(),
+        )
         if include_root_dir:
-            tar.add(directory_path, arcname=directory_path.name, recursive=True)
-        else:
-            for item in directory_path.rglob("*"):
-                arcname = item.relative_to(directory_path)
-                tar.add(item, arcname=arcname, recursive=False)
+            items.insert(0, directory_path)
+
+        for item in items:
+            if item == directory_path:
+                arcname = Path(directory_path.name)
+            else:
+                relative_path = item.relative_to(directory_path)
+                arcname = Path(directory_path.name) / relative_path if include_root_dir else relative_path
+            tar.add(item, arcname=arcname, recursive=False, filter=_normalize_tar_info)
+
+    suffix = ".tar.gz" if gzip_compress else ".tar"
+    archive_path = directory_path.parent / f"{directory_path.name}{suffix}"
+    if gzip_compress:
+        with open(archive_path, "wb") as archive_file:
+            with gzip.GzipFile(filename="", mode="wb", fileobj=archive_file, mtime=source_date_epoch) as gzip_file:
+                with tarfile.open(fileobj=gzip_file, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+                    _add_members(tar)
+    else:
+        with tarfile.open(archive_path, "w", format=tarfile.USTAR_FORMAT) as tar:
+            _add_members(tar)
     print(f"Archive created: {archive_path}")
     return archive_path
 

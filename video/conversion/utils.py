@@ -12,7 +12,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import NamedTuple, Any
 from ._azure import download_blob
-from ._env import get_env, get_required_env
+from ._env import get_env
 from .types import ModelType, ValidationTestResults
 from .const import DEFAULT_JOB_OUTPUTS_DIR, DEFAULT_TEST_DATA_DIR
 from src.utils.video_reader import PNGReader, YUVReader
@@ -37,33 +37,37 @@ def get_git_revision_hash() -> str:
 
 
 def download_test_data(path: Path | str, base_path: Path | str = DEFAULT_TEST_DATA_DIR) -> Path:
-    if Path(path).is_absolute():
-        return Path(path)
+    path = Path(path)
+    if path.is_absolute():
+        return path
 
-    account = get_required_env("AZURE_TEST_DATA_STORAGE_ACCOUNT")
-
-    return download_blob(
-        account,
-        get_env("AZURE_TEST_DATA_CONTAINER", "test-set"),
-        path,
-        Path(base_path).expanduser(),
-        overwrite=False,
-    )
+    base_path = Path(base_path).expanduser()
+    if account := get_env("AZURE_TEST_DATA_STORAGE_ACCOUNT"):
+        return download_blob(
+            account,
+            get_env("AZURE_TEST_DATA_CONTAINER", "test-set"),
+            path,
+            base_path,
+            overwrite=False,
+        )
+    return base_path / path
 
 
 def download_job_outputs(path: Path | str, base_path: Path | str = DEFAULT_JOB_OUTPUTS_DIR) -> Path:
-    if Path(path).is_absolute():
-        return Path(path)
+    path = Path(path)
+    if path.is_absolute():
+        return path
 
-    account = get_required_env("AZURE_JOB_OUTPUTS_STORAGE_ACCOUNT")
-
-    return download_blob(
-        account,
-        get_env("AZURE_JOB_OUTPUTS_CONTAINER", "job-outputs"),
-        path,
-        Path(base_path).expanduser(),
-        overwrite=False,
-    )
+    base_path = Path(base_path).expanduser()
+    if account := get_env("AZURE_JOB_OUTPUTS_STORAGE_ACCOUNT"):
+        return download_blob(
+            account,
+            get_env("AZURE_JOB_OUTPUTS_CONTAINER", "job-outputs"),
+            path,
+            base_path,
+            overwrite=False,
+        )
+    return base_path / path
 
 
 def read_video_frames(
@@ -138,13 +142,16 @@ def calc_psnr(x1: np.ndarray, x2: np.ndarray) -> float:
     return -10 * np.log10(mse).item()
 
 
-def parse_metrics_dataframe(metrics) -> pd.DataFrame:
+def parse_metrics_dataframe(metrics, scenarios_list: list[str] | None = None) -> pd.DataFrame:
     df_metrics = []
     for test_class, test_class_data in metrics.items():
         for sequence_name, sequence_data in test_class_data.items():
+            if scenarios_list is not None and test_class not in scenarios_list:
+                continue
             for q_name, q_data in sequence_data.items():
                 fps = q_data.get("fps", 30.0)
                 frame_bpp = np.array(q_data.get("frame_bpp", []))
+                frame_bytes = frame_bpp * q_data["frame_pixel_num"] / 8
                 frame_kbps = frame_bpp * q_data["frame_pixel_num"] * fps / 1000
                 df_metrics.append(
                     {
@@ -159,8 +166,10 @@ def parse_metrics_dataframe(metrics) -> pd.DataFrame:
                         "psnr_y": q_data["ave_all_frame_psnr_y"],
                         "psnr_u": q_data["ave_all_frame_psnr_u"],
                         "psnr_v": q_data["ave_all_frame_psnr_v"],
+                        "frame_temporal_id": q_data.get("frame_temporal_id", [0] * len(frame_kbps)),
                         "frame_qp": q_data.get("frame_qp", []),
                         "frame_bpp": q_data.get("frame_bpp", []),
+                        "frame_bytes": frame_bytes.tolist(),
                         "frame_kbps": frame_kbps.tolist(),
                         "frame_psnr": q_data.get("frame_psnr", []),
                         "frame_psnr_y": q_data.get("frame_psnr_y", []),
@@ -176,6 +185,7 @@ def parse_metrics(
     data: dict[str, Any],
     only_common_clips: bool = True,
     filter_sequences: set[str] | list[str] | None = None,
+    scenarios_list: list[str] | None = None,
 ) -> dict[str, pd.DataFrame]:
     def _find_common_sequences(data) -> set[str]:
         res = None
@@ -195,7 +205,7 @@ def parse_metrics(
                 metrics = transform_validation_test_results(test_data)
         else:
             metrics = value
-        res[name] = parse_metrics_dataframe(metrics)
+        res[name] = parse_metrics_dataframe(metrics, scenarios_list=scenarios_list)
 
     common_sequences = None
     if filter_sequences is not None:
