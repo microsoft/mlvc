@@ -1458,7 +1458,7 @@ class EncoderTester:
                 elif decoder_format == "mp4":
                     decoder_ext = ".mp4"
                 else:
-                    raise ValueError(f"Unsuppoted decoder_format {decoder_format}")
+                    raise ValueError(f"Unsupported decoder_format {decoder_format}")
 
             for seq_name, seq_desc in dataset_desc["sequences"].items():
                 intra_period = params.intra_period

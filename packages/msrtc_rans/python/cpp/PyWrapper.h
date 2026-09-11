@@ -34,7 +34,7 @@
 
 namespace PyWrapper {
 
-// Marker to contruct a reference to new object
+// Marker to construct a reference to new object
 struct NewRef {};
 
 // Simplistic implementation of reference counting pointer to python object

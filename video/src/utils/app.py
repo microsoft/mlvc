@@ -1298,7 +1298,7 @@ class BaseTrainApp(BaseApp):
 
             min_grad_scale = self.get_config_by_path("train.min_grad_scale", default=0, expected_type=numbers.Number)
             if min_grad_scale > 0:
-                # sync scale value to garantee all ranks skip or process batch
+                # sync scale value to guarantee all ranks skip or process batch
                 if self.world_size > 1:
                     grad_scale_tensor = torch.tensor(grad_scale, dtype=torch.float64, device=self.device)
                     torch.distributed.broadcast(grad_scale_tensor, src=0)
