@@ -18,7 +18,8 @@ dependencies = [
     "onnxconverter_common",
     "coremltools",
     # Azure
-    "cryptography<=46.0.3", # Latest versions missing ARM64 Windows wheels
+    "cryptography<=46.0.3; sys_platform == 'win32' and platform_machine == 'ARM64'", # Latest versions missing ARM64 Windows wheels
+    "cryptography; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "azure-identity",
     "azure-storage-blob",
     "azure-ai-ml",
@@ -55,7 +56,7 @@ onnxruntime-windowsml = [
 ci = [
     "pytest",
     "pyright",
-    "ruff",
+    "ruff==0.15.21",
     "pre-commit",
     "pre-commit-hooks",
     "python-dotenv",
