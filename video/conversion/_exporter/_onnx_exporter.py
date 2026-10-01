@@ -1,12 +1,23 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
 from pathlib import Path
+
+import onnx
+import torch
+
 from ._base_exporter import BaseExporter
-from ..types import ModelType, TargetDevice, ModelPrecision, ModelData, ConversionMetadata
-from ..utils import get_namedtuple_fields, to_torch_namedtuple
-from ._onnx_utils import DEFAULT_ONNX_PASSES, OnnxOptimizer
+from ..types import (
+    ModelType,
+    TargetDevice,
+    ModelPrecision,
+    ModelData,
+    ConversionMetadata,
+    TensorLayout,
+    ModelPartMetadata,
+)
+from ..utils import to_torch_namedtuple
+from ._onnx_utils import DEFAULT_ONNX_PASSES, OnnxOptimizer, convert_io_to_nhwc
 
 
 class OnnxExporter(BaseExporter):
@@ -57,11 +68,10 @@ class OnnxExporter(BaseExporter):
         example_model_data: list[ModelData],
         output_path: Path,
         fake_quantized: bool = False,
-    ) -> None:
+    ) -> ModelPartMetadata:
+        # Model export
+        metadata = self._compose_model_part_metadata(model, example_model_data[-1])
         example_input = example_model_data[-1].inputs
-        example_output = example_model_data[-1].outputs
-        input_names = get_namedtuple_fields(example_input)
-        output_names = get_namedtuple_fields(example_output)
 
         model_output_path = str(output_path / f"{model_name}.onnx")
         torch.onnx.export(
@@ -70,14 +80,14 @@ class OnnxExporter(BaseExporter):
             f=model_output_path,
             export_params=True,
             do_constant_folding=True,
-            input_names=input_names,
-            output_names=output_names,
+            input_names=[field.name for field in metadata.input_fields],
+            output_names=[field.name for field in metadata.output_fields],
             opset_version=self._opset_version,
             dynamo=False,
         )
 
+        # Precision conversion
         if self._precision == ModelPrecision.FP16:
-            import onnx
             import warnings
             from onnxconverter_common import float16
 
@@ -90,14 +100,27 @@ class OnnxExporter(BaseExporter):
             model_fp16 = float16.convert_float_to_float16(onnx.load(model_output_path))
             onnx.save(model_fp16, model_output_path)
 
-        if len(self._optimization_passes) > 0:
-            print(f"Optimizing ONNX model with passes: {self._optimization_passes}")
-            opt_model = onnx.load(model_output_path)
-            optimizer = OnnxOptimizer(opt_model)
-            opt_model = optimizer.optimize(passes=self._optimization_passes)
-            onnx.save(opt_model, model_output_path)
+        # Graph post-processing
+        uses_nhwc = TensorLayout.NHWC in (self._image_layout, self._feature_layout)
+        if self._optimization_passes or uses_nhwc:
+            onnx_model = onnx.load(model_output_path)
+            if self._optimization_passes:
+                print(f"Optimizing ONNX model with passes: {self._optimization_passes}")
+                onnx_model = OnnxOptimizer(onnx_model).optimize(passes=self._optimization_passes)
+            if uses_nhwc:
+                convert_io_to_nhwc(
+                    onnx_model,
+                    input_names=tuple(
+                        field.name for field in metadata.input_fields if field.layout == TensorLayout.NHWC
+                    ),
+                    output_names=tuple(
+                        field.name for field in metadata.output_fields if field.layout == TensorLayout.NHWC
+                    ),
+                )
+            onnx.save(onnx_model, model_output_path)
 
         print(f"Saved ONNX model to {model_output_path}")
+        return metadata
 
     def _compose_metadata(self, *args, **kwargs) -> ConversionMetadata:
         res = super()._compose_metadata(*args, **kwargs)

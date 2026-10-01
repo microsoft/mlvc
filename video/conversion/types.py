@@ -94,6 +94,11 @@ class ModelType(str, Enum):
     TORCH = "torch"
 
 
+class TensorLayout(str, Enum):
+    NCHW = "nchw"
+    NHWC = "nhwc"
+
+
 class ModelPrecision(str, Enum):
     FP16 = "fp16"
     FP32 = "fp32"
@@ -196,10 +201,16 @@ class SplitModelParams:
 
 
 @dataclass(frozen=True)
+class ModelFieldMetadata:
+    name: str
+    layout: TensorLayout | None = None
+
+
+@dataclass(frozen=True)
 class ModelPartMetadata:
     precision: ModelPrecision
-    input_fields: list[str]
-    output_fields: list[str]
+    input_fields: list[ModelFieldMetadata]
+    output_fields: list[ModelFieldMetadata]
 
 
 @dataclass(frozen=True)
@@ -422,11 +433,13 @@ class ScaleDecoderType(str, Enum):
     UPSAMPLE = "upsample"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ExporterParams:
     model_type: ModelType
     target_device: TargetDevice
     precision: ModelPrecision
+    image_layout: TensorLayout = TensorLayout.NCHW
+    feature_layout: TensorLayout = TensorLayout.NCHW
     scale_decoder_type: str
     test_video_path: str
     image_width: int
@@ -516,7 +529,7 @@ class ModelManifest:
     decoder_interface_type: DecoderInterfaceType = DecoderInterfaceType.FP16_SCALE_SENDING_NO_RESET_1P
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ModelMetadata:
     model_width: int
     model_height: int
@@ -538,6 +551,8 @@ class ModelMetadata:
     ltr_start_idx: int
     ltr_period: int | None
     qp_mapping: list[int] | None
+    image_layout: TensorLayout = TensorLayout.NCHW
+    feature_layout: TensorLayout = TensorLayout.NCHW
 
 
 @dataclass(frozen=True)

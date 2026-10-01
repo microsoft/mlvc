@@ -14,7 +14,7 @@ from coremltools.optimize.torch.quantization import (
 from . import _coreml_utils  # noqa: F401
 from ..utils import iter_namedtuple, to_torch_namedtuple
 from ._base_exporter import BaseExporter
-from ..types import ModelType, ModelPrecision, ConversionMetadata, ModelData
+from ..types import ModelType, ModelPrecision, ConversionMetadata, ModelData, TensorLayout, ModelPartMetadata
 
 
 def _quantize(model: torch.nn.Module, example_model_data: list[ModelData]) -> torch.nn.Module:
@@ -59,6 +59,8 @@ class CoreMLExporter(BaseExporter):
         **kwargs,
     ):
         super().__init__(model_type=ModelType.COREML, **kwargs)
+        if TensorLayout.NHWC in (self._image_layout, self._feature_layout):
+            raise ValueError("CoreML exporter only supports NCHW layouts")
         self._quantize_int8 = quantize_int8
         self._minimum_deployment_target = minimum_deployment_target
         self._coreml_prepend_pass_pipelines = coreml_prepend_pass_pipelines
@@ -72,7 +74,8 @@ class CoreMLExporter(BaseExporter):
         example_model_data: list[ModelData],
         output_path: Path,
         fake_quantized: bool = False,
-    ) -> None:
+    ) -> ModelPartMetadata:
+        metadata = self._compose_model_part_metadata(model, example_model_data[-1])
         if self._quantize_int8:
             print("Quantizing model...")
             model = _quantize(model, example_model_data)
@@ -132,6 +135,7 @@ class CoreMLExporter(BaseExporter):
         model_output_path = str(output_path / f"{model_name}.mlpackage")
         converted.save(model_output_path)  # type: ignore[attr-defined]
         print(f"Saved CoreML model to {model_output_path}")
+        return metadata
 
     def _compose_metadata(self, *args, **kwargs) -> ConversionMetadata:
         res = super()._compose_metadata(*args, **kwargs)

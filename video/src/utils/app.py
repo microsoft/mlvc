@@ -122,8 +122,8 @@ class BaseApp(abc.ABC):
         return metrics_writer
 
     def main(self):
+        self.configure_init_logging()
         self._config = self.parse_cmdline()
-        self.configure_init_logging(level=logging.getLevelName(self.config.get("log_level", "INFO")))
 
         rc = -1
         # noinspection PyBroadException
@@ -150,12 +150,18 @@ class BaseApp(abc.ABC):
         quit(rc)
 
     # noinspection PyMethodMayBeStatic
-    def configure_init_logging(self, **kwargs):
-        configure_logging(**kwargs)
+    def configure_init_logging(self):
+        configure_logging()
 
     def configure_logging(self, local_rank: int):
+        root_logger = logging.getLogger()
+
+        level = self.config.get("log_level")
+        if level is not None:
+            root_logger.setLevel(level)
+
         if local_rank > 0:
-            for handler in logging.getLogger().handlers:
+            for handler in root_logger.handlers:
                 if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
                     handler.setLevel(logging.WARNING)
 
@@ -167,7 +173,6 @@ class BaseApp(abc.ABC):
             timestamp = datetime.datetime.now(datetime.timezone.utc)
             log_file_name = os.path.join(log_dir, f"l-{max(0, local_rank)}-{timestamp:%Y_%m_%d-%H_%M_%S}.log")
 
-            root_logger = logging.getLogger()
             handler = logging.FileHandler(log_file_name)
             handler.setFormatter(root_logger.handlers[0].formatter)
             root_logger.addHandler(handler)

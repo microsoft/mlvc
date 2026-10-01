@@ -124,6 +124,7 @@ class BaseBundler(ABC):
 
             model_params = metadata.params.full_model_params
             split_model_params = metadata.params.split_model_params
+            exporter_params = metadata.params.exporter_params
 
             model_manifests[model_id] = ModelManifest(
                 metadata_path=metadata_bundle[model_id].as_posix(),
@@ -158,13 +159,15 @@ class BaseBundler(ABC):
                 downsample_feature=model_params.downsample_feature,
                 downsample_latent=model_params.downsample_latent,
                 downsample_hyperprior=model_params.downsample_hyperprior,
-                scale_decoder_type=metadata.params.exporter_params.scale_decoder_type,
+                scale_decoder_type=exporter_params.scale_decoder_type,
                 y_scale_repeat=model_params.y_scale_repeat,
                 iframe_period=model_params.iframe_period,
                 reset_period=model_params.reset_period,
                 ltr_start_idx=model_params.ltr_start_idx,
                 ltr_period=model_params.ltr_period,
                 qp_mapping=model_params.qp_mapping,
+                image_layout=exporter_params.image_layout,
+                feature_layout=exporter_params.feature_layout,
             )
 
         bundle_manifest = self._compose_manifest(model_registry, model_manifests, model_metadata)
