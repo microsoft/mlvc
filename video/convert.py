@@ -620,6 +620,12 @@ def _add_bundle_arguments(parser: argparse.ArgumentParser):
         choices=[x.value for x in TargetDevice],
         help="Target device for the model",
     )
+    group_bundle_arguments.add_argument(
+        "--exporter-params-json",
+        type=str,
+        default="{}",
+        help="JSON string with additional exporter parameters",
+    )
 
     group_bundle_arguments.add_argument(
         "--model-version",
@@ -742,7 +748,11 @@ def _export_model(
     **kwargs,
 ) -> Path:
     model_params = json.loads(model_params_json)
+    if not isinstance(model_params, dict):
+        raise ValueError("Model parameters must be a JSON object")
     exporter_params = json.loads(exporter_params_json)
+    if not isinstance(exporter_params, dict):
+        raise ValueError("Exporter parameters must be a JSON object")
 
     full_model = full_model_factory(
         model_version=model_version,
@@ -841,8 +851,13 @@ def _bundle(
     job_outputs_dir: Path | str,
     test_data_dir: Path | str,
     skip_if_exists: bool = False,
+    *,
+    exporter_params_json: str = "{}",
     **kwargs,
 ):
+    exporter_params = json.loads(exporter_params_json)
+    if not isinstance(exporter_params, dict):
+        raise ValueError("Exporter parameters must be a JSON object")
 
     # Full model
     full_model = full_model_factory(
@@ -865,6 +880,7 @@ def _bundle(
             target_device=target_device,
             skip_if_exists=skip_if_exists,
             test_data_dir=test_data_dir,
+            **exporter_params,
         )
         model_path = exporter.run()
         model_paths.append(model_path)

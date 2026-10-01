@@ -15,6 +15,7 @@ from ..types import (
     SplitModelParams,
     RuntimeParams,
     ModelPartMetadata,
+    ModelFieldMetadata,
     ModelPrecision,
     ModelType,
     ConversionMetadata,
@@ -37,8 +38,8 @@ def prepare_model_parts(torch_model_parts, runtime_params):
 
         model_part_metadata = ModelPartMetadata(
             precision=ModelPrecision.FP32,
-            input_fields=list(model.InputType._fields),
-            output_fields=list(model.OutputType._fields),
+            input_fields=[ModelFieldMetadata(name) for name in model.InputType._fields],
+            output_fields=[ModelFieldMetadata(name) for name in model.OutputType._fields],
         )
 
         model_parts[model_part_id] = ModelWrapper(

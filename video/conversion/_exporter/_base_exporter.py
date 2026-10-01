@@ -6,7 +6,6 @@ import shutil
 import platform
 import datetime
 
-import dataclasses
 from pathlib import Path
 from abc import ABC, abstractmethod
 from ..const import (
@@ -27,10 +26,26 @@ from ..types import (
     ScaleDecoderType,
     FrameLoopParams,
     FrameLoopSummary,
+    TensorLayout,
+    ModelFieldMetadata,
+    ModelPartMetadata,
 )
 from .._frame_loop import FrameLoop, aggregate_frame_loop_results
 from .._split_model import BaseSplitModel
 from ..utils import get_git_revision_hash
+
+
+_IMAGE_FIELDS = {
+    "x",
+    "x_hat",
+    "ref_frame",
+    "x_hat_from_reset_head",
+    "x_luma",
+    "x_chroma",
+    "x_hat_luma",
+    "x_hat_chroma",
+}
+_FEATURE_FIELDS = {"ref_feature", "feature", "feature_memory"}
 
 
 class BaseExporter(ABC):
@@ -39,27 +54,32 @@ class BaseExporter(ABC):
         model_type: ModelType,
         target_device: TargetDevice,
         split_model: BaseSplitModel,
+        *,
         precision: ModelPrecision = ModelPrecision.FP16,
+        image_layout: TensorLayout = TensorLayout.NCHW,
+        feature_layout: TensorLayout = TensorLayout.NCHW,
         scale_decoder_type: str | None = None,
         test_data_dir: str = DEFAULT_TEST_DATA_DIR,
         test_video_path: Path | str | None = None,
         image_width: int | None = None,
         image_height: int | None = None,
         frame_count: int = DEFAULT_CONVERT_FRAME_COUNT,
+        q_index_list: list[int] = [21, 63],
         output_path: Path | str = DEFAULT_EXPORT_DIR,
         output_name: str | None = None,
         skip_if_exists: bool = False,
-        q_index_list: list[int] = [21, 63],
     ) -> None:
         print(
             f"Exporting model type: {model_type.value}, target device: {target_device.value}, precision: "
-            f"{precision.value}"
+            f"{precision.value}, image layout: {image_layout.value}, feature layout: {feature_layout.value}"
         )
 
         self._model_type = model_type
         self._target_device = target_device
         self._split_model = split_model
         self._precision = precision
+        self._image_layout = image_layout
+        self._feature_layout = feature_layout
         self._scale_decoder_type = scale_decoder_type
         self._test_data_dir = Path(test_data_dir)
 
@@ -76,10 +96,10 @@ class BaseExporter(ABC):
             )
 
         self._frame_count = frame_count
+        self._q_index_list = q_index_list
         self._output_path = Path(output_path)
         self._output_name = output_name
         self._skip_if_exists = skip_if_exists
-        self._q_index_list = q_index_list
 
     def run(self) -> Path:
         # Output name
@@ -135,9 +155,10 @@ class BaseExporter(ABC):
 
         # Export model parts
         full_model = self._split_model.full_model
+        model_parts_metadata: dict[ModelPartId, ModelPartMetadata] = {}
         for model_part_id, model_part in self._split_model.model_parts.items():
             print(f"Exporting {model_part_id.value}...")
-            self._export(
+            model_parts_metadata[model_part_id] = self._export(
                 model_name=model_part_id.value,
                 model=model_part.torch_model,
                 example_model_data=example_model_data[model_part_id],
@@ -154,6 +175,7 @@ class BaseExporter(ABC):
         # Save metadata
         conversion_metadata = self._compose_metadata(
             output_name=output_name,
+            model_parts_metadata=model_parts_metadata,
             conversion_loop_params=conversion_loop_params,
             conversion_loop_results=conversion_loop_results,
         )
@@ -168,7 +190,7 @@ class BaseExporter(ABC):
         example_model_data: list[ModelData],
         output_path: Path,
         fake_quantized: bool = False,
-    ) -> None:
+    ) -> ModelPartMetadata:
         pass
 
     def _export_scale_decoder(self, model_path: Path) -> None:
@@ -196,23 +218,41 @@ class BaseExporter(ABC):
 
             self._scale_decoder_type = export_scale_decoder_ext(self, model_path)
 
+    def _compose_model_part_metadata(self, model: torch.nn.Module, example_model_data: ModelData) -> ModelPartMetadata:
+        field_layouts = {
+            **dict.fromkeys(_IMAGE_FIELDS, self._image_layout),
+            **dict.fromkeys(_FEATURE_FIELDS, self._feature_layout),
+        }
+
+        def make_fields(type_name: str, values) -> list[ModelFieldMetadata]:
+            return [
+                ModelFieldMetadata(
+                    name,
+                    field_layouts.get(name, TensorLayout.NCHW) if getattr(values, name).ndim == 4 else None,
+                )
+                for name in getattr(model, type_name)._fields
+            ]
+
+        return ModelPartMetadata(
+            precision=self._precision,
+            input_fields=make_fields("InputType", example_model_data.inputs),
+            output_fields=make_fields("OutputType", example_model_data.outputs),
+        )
+
     def _compose_metadata(
         self,
         output_name: str,
+        model_parts_metadata: dict[ModelPartId, ModelPartMetadata],
         conversion_loop_params: list[FrameLoopParams] = [],
         conversion_loop_results: list[FrameLoopSummary] = [],
     ) -> ConversionMetadata:
         split_model = self._split_model
 
-        model_parts_metadata = {}
-        for model_part_id, model_part in split_model.model_parts.items():
-            model_parts_metadata[model_part_id] = dataclasses.replace(model_part.metadata, precision=self._precision)
-
         assert self._scale_decoder_type is not None, "Scale decoder type must be resolved before composing metadata"
 
         return ConversionMetadata(
             name=output_name,
-            timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            timestamp=datetime.datetime.now(datetime.UTC).isoformat(),
             git_hash=get_git_revision_hash(),
             platform=platform.platform(),
             platform_version=platform.version(),
@@ -224,6 +264,8 @@ class BaseExporter(ABC):
                     model_type=self._model_type,
                     target_device=self._target_device,
                     precision=self._precision,
+                    image_layout=self._image_layout,
+                    feature_layout=self._feature_layout,
                     scale_decoder_type=self._scale_decoder_type,
                     test_video_path=self._test_video_path.as_posix(),
                     image_width=self._image_width,

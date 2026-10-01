@@ -20,6 +20,7 @@ from .types import (
     CoremlComputeUnits,
     OnnxExecutionProvider,
     RuntimeParams,
+    TensorLayout,
 )
 
 
@@ -35,8 +36,8 @@ class ModelWrapper:
         self._model = model
         self._metadata = metadata
         self._runtime_params = runtime_params
-        self._input_type = namedtuple("ModelWrapperInput", metadata.input_fields)
-        self._output_type = namedtuple("ModelWrapperOutput", metadata.output_fields)
+        self._input_type = namedtuple("ModelWrapperInput", [field.name for field in metadata.input_fields])
+        self._output_type = namedtuple("ModelWrapperOutput", [field.name for field in metadata.output_fields])
         self._inference_time = 0.0
 
     @classmethod
@@ -74,7 +75,12 @@ class ModelWrapper:
     @torch.inference_mode()
     def predict(self, inputs: NamedTuple) -> Any:
         # Prepare input
-        model_inputs = self._input_type(**{k: self._transform_input(v) for k, v in inputs._asdict().items()})
+        model_inputs = self._input_type(
+            **{
+                field.name: self._transform_input(getattr(inputs, field.name), field.layout)
+                for field in self._metadata.input_fields
+            }
+        )
 
         # Predict
         predict_start = time.perf_counter()
@@ -97,10 +103,15 @@ class ModelWrapper:
         self._inference_time = time.perf_counter() - predict_start
 
         # Prepare output
-        model_outputs = self._output_type(**{k: self._transform_output(v) for k, v in model_outputs.items()})
+        model_outputs = self._output_type(
+            **{
+                field.name: self._transform_output(model_outputs[field.name], field.layout)
+                for field in self._metadata.output_fields
+            }
+        )
         return model_outputs
 
-    def _transform_input(self, value: np.ndarray) -> torch.Tensor | np.ndarray:
+    def _transform_input(self, value: np.ndarray, layout: TensorLayout | None) -> torch.Tensor | np.ndarray:
         if not isinstance(value, np.ndarray):
             raise ValueError(f"Input must be a np.ndarray, got {type(value)}")
 
@@ -115,11 +126,14 @@ class ModelWrapper:
             if value.dtype in [np.float16, np.float32] and value.dtype != dtype:
                 value = value.astype(dtype)
 
+        if layout == TensorLayout.NHWC:
+            value = np.ascontiguousarray(value.transpose(0, 2, 3, 1))
+
         if self._model_type == ModelType.TORCH:
             return torch.from_numpy(value)
         return value
 
-    def _transform_output(self, value) -> np.ndarray:
+    def _transform_output(self, value, layout: TensorLayout | None) -> np.ndarray:
         if isinstance(value, torch.Tensor):
             value = value.numpy()
 
@@ -128,6 +142,8 @@ class ModelWrapper:
         if value.dtype in [np.float16, np.float32] and value.dtype != dtype:
             # Use torch for faster conversion
             value = torch.from_numpy(value).to(dtype=torch_dtype).numpy()
+        if layout == TensorLayout.NHWC:
+            value = np.ascontiguousarray(value.transpose(0, 3, 1, 2))
         return value
 
     @property

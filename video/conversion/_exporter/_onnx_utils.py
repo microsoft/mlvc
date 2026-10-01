@@ -652,3 +652,93 @@ class OnnxOptimizer:
             graph.node.remove(n)
         # print(f"split_gated_conv: split Conv '{conv_node.name}' ({out_ch} ch) into {num_splits} ({chunk} ch each)")
         return True
+
+
+def convert_io_to_nhwc(
+    model: onnx.ModelProto,
+    input_names: tuple[str, ...] | None = None,
+    output_names: tuple[str, ...] | None = None,
+) -> None:
+    graph = model.graph
+    if input_names is None:
+        input_names = tuple(value.name for value in graph.input)
+    if output_names is None:
+        output_names = tuple(value.name for value in graph.output)
+    selected_inputs = [value for value in graph.input if value.name in input_names]
+    selected_outputs = [value for value in graph.output if value.name in output_names]
+    if not selected_inputs and not selected_outputs:
+        return
+    for value in (*selected_inputs, *selected_outputs):
+        dimensions = value.type.tensor_type.shape.dim
+        if len(dimensions) != 4 or any(not dim.HasField("dim_value") or dim.dim_value <= 0 for dim in dimensions):
+            raise ValueError(f"Layout conversion requires a static rank-4 tensor: {value.name}")
+    graph_input_names = {value.name for value in graph.input}
+    for value in graph.output:
+        if value.name in graph_input_names and (value.name in input_names) != (value.name in output_names):
+            raise ValueError(f"Shared input/output tensor {value.name!r} must have the same layout on both ports")
+
+    initializers = (*graph.initializer, *(value.values for value in graph.sparse_initializer))
+    initializer_names = {value.name for value in initializers}
+    for value in selected_inputs:
+        if value.name in initializer_names:
+            raise ValueError(f"Layout conversion does not support inputs with initializer defaults: {value.name}")
+    if any(
+        attribute.type in (onnx.AttributeProto.GRAPH, onnx.AttributeProto.GRAPHS)
+        for node in graph.node
+        for attribute in node.attribute
+    ):
+        raise ValueError("Layout conversion does not support nested graphs")
+
+    used_names = {value.name for value in (*graph.input, *graph.output, *graph.value_info, *initializers)}
+    for node in graph.node:
+        used_names.update((node.name, *node.input, *node.output))
+
+    def unique_name(prefix):
+        name = prefix
+        suffix = 0
+        while name in used_names:
+            suffix += 1
+            name = f"{prefix}_{suffix}"
+        used_names.add(name)
+        return name
+
+    renamed = {}
+    for value in (*selected_inputs, *selected_outputs):
+        if value.name not in renamed:
+            renamed[value.name] = unique_name(f"{value.name}_layout_nchw")
+    for node in graph.node:
+        for names in (node.input, node.output):
+            for index, name in enumerate(names):
+                names[index] = renamed.get(name, name)
+    for value in (*initializers, *graph.value_info):
+        value.name = renamed.get(value.name, value.name)
+
+    existing_value_info = {value.name for value in graph.value_info}
+    input_transposes = []
+    output_transposes = []
+    for values, is_input in ((selected_inputs, True), (selected_outputs, False)):
+        for value in values:
+            internal_name = renamed[value.name]
+            if internal_name not in existing_value_info:
+                internal_value = graph.value_info.add()
+                internal_value.CopyFrom(value)
+                internal_value.name = internal_name
+                existing_value_info.add(internal_name)
+            shape = [dim.dim_value for dim in value.type.tensor_type.shape.dim]
+            for dimension, index in zip(value.type.tensor_type.shape.dim, (0, 2, 3, 1), strict=True):
+                dimension.dim_value = shape[index]
+            if not is_input and value.name in graph_input_names:
+                continue
+            transpose = onnx.helper.make_node(
+                "Transpose",
+                inputs=[value.name if is_input else internal_name],
+                outputs=[internal_name if is_input else value.name],
+                name=unique_name(f"{value.name}_layout_transpose"),
+                perm=[0, 3, 1, 2] if is_input else [0, 2, 3, 1],
+            )
+            (input_transposes if is_input else output_transposes).append(transpose)
+
+    nodes = list(graph.node)
+    del graph.node[:]
+    graph.node.extend([*input_transposes, *nodes, *output_transposes])
+    onnx.checker.check_model(model)
