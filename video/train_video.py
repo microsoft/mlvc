@@ -5,6 +5,7 @@ import contextlib
 import logging
 import numbers
 import random
+from functools import cached_property
 from typing import Any, Callable, Optional, Sequence, Iterable
 
 import torch
@@ -17,6 +18,7 @@ from src.transforms.functional import rgb2ycbcr
 from src.utils.app import BaseTrainVideoApp
 from src.utils.ane_mode import drift_simulation
 from src.utils.stream_helper import get_state_dict
+from src.utils.torch_compile import TorchCompileManager, with_standard_strides
 
 
 class ForwardPassWrapper(nn.Module):
@@ -129,6 +131,8 @@ class TrainVideoApp(BaseTrainVideoApp):
             p.requires_grad = False
 
         return model
+        # could also compile the I-frame model here, but no big benefit
+        # return self.torch_compile.compile(model, "I-frame model")
 
     @property
     def model_config(self) -> dict[str, Any]:
@@ -140,6 +144,31 @@ class TrainVideoApp(BaseTrainVideoApp):
         config = self._resolve_nested_ckpt_paths(self.model_config)
         assert isinstance(config, dict)
         return create_video_model(config)
+
+    def load_model(self, model_state, pretrained: Optional[bool] = None):
+        model = super().load_model(model_state, pretrained)
+        return self.torch_compile.compile(model, "training model")
+
+    # Non-compile config keys read by Python-level guards in the compiled forward; changing them invalidates graphs.
+    TORCH_COMPILE_GUARD_KEYS = (
+        "train.dataset.patch_size",
+        "train.dataset.batch_size",
+        "train.cascade",
+        "train.use_backprop_checkpoints",
+    )
+
+    @cached_property
+    def torch_compile(self) -> TorchCompileManager:
+        return TorchCompileManager(
+            config=lambda: self.config,
+            device=lambda: self.device,
+            rank=lambda: self.rank,
+            extra_reset_keys=self.TORCH_COMPILE_GUARD_KEYS,
+        )
+
+    def on_config_changed(self, change_set: dict[str, bool]):
+        super().on_config_changed(change_set)
+        self.torch_compile.on_config_changed(change_set, self.get_unwrapped_model(self.model))
 
     def _resolve_nested_ckpt_paths(self, config):
         """Recursively resolve every ckpt_path string in a config tree. Needed for MoE models."""
@@ -914,6 +943,12 @@ class TrainVideoApp(BaseTrainVideoApp):
         frame_q_index = q_index[:, frame_idx]
         frame_lambdas = lambdas[:, frame_idx]
 
+        if self.torch_compile.enabled:
+            # Frame views inherit clip-length strides; normalize them so n_frames changes do not recompile.
+            frame_q_index = with_standard_strides(frame_q_index)
+            x = with_standard_strides(x)
+            dpb["ref_frame"] = with_standard_strides(dpb.get("ref_frame"))
+
         rd = model(x, dpb, q_index=frame_q_index, fa_idx=fa_idx, **kwargs)
 
         if self.distortion_weights is not None:
@@ -1026,7 +1061,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         if is_last_frame:
             dpb = None
         else:
-            dpb = {n: v.detach() for n, v in dpb.items()}
+            dpb = self.torch_compile.detach_carried(dpb)
 
         return loss, dpb, metric_names, metric_values
 
@@ -1080,6 +1115,8 @@ class TrainVideoApp(BaseTrainVideoApp):
                 loss.backward()
                 if self.use_drift_loss:
                     self._truncate_drift_bptt()
+                if not is_last:
+                    self.torch_compile.own_accumulated_grads(self.model.parameters())
 
             del loss
 
@@ -1138,8 +1175,9 @@ class TrainVideoApp(BaseTrainVideoApp):
 
             # Prepare dpb for next frame range
             if frame_idx == return_dpb_frame:
-                # detach dpb tensors to avoid backpropagating through them
-                return_dpb = {n: v.detach() for n, v in dpb.items()}
+                # detach dpb tensors to avoid backpropagating through them; clone under compile since
+                # CUDA graph replays in the next frame range would overwrite the output buffers
+                return_dpb = self.torch_compile.detach_carried(dpb)
 
             # Prepare dpb for next frame
             if frame_idx != stop - 1:
@@ -1190,6 +1228,11 @@ class TrainVideoApp(BaseTrainVideoApp):
         self.add_step_metric("frame_grad_scale", stats[1].item())
 
     def test_model(self, epoch, model: Any):
+        # DeQA-Score loads a large model; free CUDA graph memory pools only when it is going to run.
+        with self.torch_compile.eval_scope(free_cudagraph_pools=self.is_benchmark_deqa_epoch(epoch)):
+            self._test_model(epoch, model)
+
+    def _test_model(self, epoch, model: Any):
         # Optional model optimizations for eval (may return a copy)
         eval_config = self.get_config_by_path("model.p_frame", expected_type=dict, default={})
         model = model.prepare_for_eval(eval_config)

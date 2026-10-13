@@ -1605,6 +1605,7 @@ dependencies = [
     { name = "torchao" },
     { name = "tqdm" },
     { name = "transformers", marker = "platform_machine != 'ARM64' or sys_platform != 'win32' or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
+    { name = "triton-windows", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
 ]
 
 [package.optional-dependencies]
@@ -1680,6 +1681,7 @@ requires-dist = [
     { name = "torchao" },
     { name = "tqdm" },
     { name = "transformers", marker = "platform_machine != 'ARM64' or sys_platform != 'win32'", specifier = ">=5.14.1,<6" },
+    { name = "triton-windows", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'", specifier = ">=3.6,<3.7" },
     { name = "wasdk-microsoft-windows-ai-machinelearning", marker = "sys_platform == 'win32' and extra == 'onnxruntime-windowsml'", specifier = "==1.8.*" },
     { name = "wasdk-microsoft-windows-applicationmodel-dynamicdependency-bootstrap", marker = "sys_platform == 'win32' and extra == 'onnxruntime-windowsml'", specifier = "==1.8.*" },
     { name = "winrt-windows-applicationmodel", marker = "sys_platform == 'win32' and extra == 'onnxruntime-windowsml'" },
@@ -3679,6 +3681,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/a8/cdf8b3e4c98132f965f88c2313a4b493266832ad47fb52f23d14d4f86bb5/triton-3.6.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:74caf5e34b66d9f3a429af689c1c7128daba1d8208df60e81106b115c00d6fca", size = 188266850, upload-time = "2026-01-20T16:00:43.041Z" },
     { url = "https://files.pythonhosted.org/packages/f9/0b/37d991d8c130ce81a8728ae3c25b6e60935838e9be1b58791f5997b24a54/triton-3.6.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:10c7f76c6e72d2ef08df639e3d0d30729112f47a56b0c81672edc05ee5116ac9", size = 188289450, upload-time = "2026-01-20T16:00:49.136Z" },
     { url = "https://files.pythonhosted.org/packages/35/f8/9c66bfc55361ec6d0e4040a0337fb5924ceb23de4648b8a81ae9d33b2b38/triton-3.6.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d002e07d7180fd65e622134fbd980c9a3d4211fb85224b56a0a0efbd422ab72f", size = 188400296, upload-time = "2026-01-20T16:00:56.042Z" },
+]
+
+[[package]]
+name = "triton-windows"
+version = "3.6.0.post26"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/1e/8d9814e67ba3f20094cf3c69e7815a491f20beb86469a647550ba86728b0/triton_windows-3.6.0.post26-cp312-cp312-win_amd64.whl", hash = "sha256:189d8c57911aa9d2ff983a715e5c967b325f576307db60924cab22b501a36515", size = 47402104, upload-time = "2026-03-10T02:51:40.997Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/69/7579a5da5d8c5372711bb4b99a185ad35eae6c7549d85b9f75171e06832b/triton_windows-3.6.0.post26-cp313-cp313-win_amd64.whl", hash = "sha256:033f3d50c6a0e4539a3ccfa042304dbf76bf79155f382f9c09d010323d5a9a32", size = 47402101, upload-time = "2026-03-10T02:51:47.669Z" },
 ]
 
 [[package]]

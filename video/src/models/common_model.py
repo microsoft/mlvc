@@ -238,8 +238,9 @@ class CompressionModel(nn.Module):
             scales, means = params[:, 2:, :, :].chunk(2, 1)
         return q_enc, q_dec, scales, means
 
+    @torch.compiler.assume_constant_result
     def get_mask(self, height, width, dtype, device):
-        curr_mask_str = f"{width}x{height}"
+        curr_mask_str = ("spatial", height, width, dtype, device)
         if curr_mask_str not in self.masks or self.force_generate_mask:
             micro_mask = torch.tensor(((1, 0), (0, 1)), dtype=dtype, device=device)
             mask_0 = micro_mask.repeat((height + 1) // 2, (width + 1) // 2)
@@ -349,8 +350,9 @@ class CompressionModel(nn.Module):
 
         return mask_0, mask_1, mask_2, mask_3
 
+    @torch.compiler.assume_constant_result
     def get_mask_four_parts(self, batch, channel, height, width, dtype, device):
-        curr_mask_str = f"{batch}_{channel}x{width}x{height}"
+        curr_mask_str = ("four_parts", batch, channel, height, width, dtype, device)
         with torch.no_grad():
             if curr_mask_str not in self.masks or self.force_generate_mask:
                 assert channel % 4 == 0
@@ -517,8 +519,9 @@ class CompressionModel(nn.Module):
 
         return mask_0, mask_1
 
+    @torch.compiler.assume_constant_result
     def get_mask_dual(self, batch, channel, height, width, dtype, device):
-        curr_mask_str = f"{batch}_{channel}x{width}x{height}x{str(dtype)}x{str(device)}"
+        curr_mask_str = ("dual", batch, channel, height, width, dtype, device)
         with torch.no_grad():
             if curr_mask_str not in self.masks or self.force_generate_mask:
                 assert channel % 2 == 0

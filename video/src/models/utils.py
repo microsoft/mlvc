@@ -9,6 +9,8 @@ from torch import nn
 from torch.autograd import Function
 from torch.utils.checkpoint import checkpoint as _torch_checkpoint
 
+from ..utils.ane_mode import ANESimMode
+
 
 class LowerBound(Function):
     # noinspection PyMethodOverriding
@@ -83,6 +85,12 @@ def _preserve_function_modes_context_fn():
     return context_fn
 
 
+def _is_ane_simulation_active() -> bool:
+    return any(
+        isinstance(torch._C._get_function_stack_at(i), ANESimMode) for i in range(torch._C._len_torch_function_stack())
+    )
+
+
 class CkptModule(nn.Module):
     def __init__(self):
         super().__init__()
@@ -96,13 +104,24 @@ class CkptModule(nn.Module):
 
     def forward(self, *args, **kwargs):
         if self.use_ckpt:
+            checkpoint_kwargs = {}
+            if not torch.compiler.is_compiling():
+                checkpoint_kwargs["context_fn"] = _preserve_function_modes_context_fn()
+            elif _is_ane_simulation_active():
+                # torch.compile does not support checkpoint context_fn, and without it the
+                # checkpointed region silently runs without ANE simulation.
+                raise RuntimeError(
+                    "ANE simulation is not supported inside a torch.compile region with gradient "
+                    "checkpointing. Set train.compile_model: false, disable use_backprop_checkpoints, "
+                    "or call the model outside the compiled forward."
+                )
             return _torch_checkpoint(
                 self.custom_forward(self.internal_forward),
                 *args,
                 **kwargs,
                 preserve_rng_state=False,
                 use_reentrant=False,
-                context_fn=_preserve_function_modes_context_fn(),
+                **checkpoint_kwargs,
             )
         return self.internal_forward(*args, **kwargs)
 

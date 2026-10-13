@@ -214,6 +214,11 @@ class BaseApp(abc.ABC):
     def configure_cmdline_arguments(self, parser: argparse.ArgumentParser):
         parser.add_argument("--distributed_backend", help="distributed backend to use for multi-processing run")
         parser.add_argument(
+            "--distributed_timeout_minutes",
+            type=float,
+            help="timeout in minutes for distributed collective operations (default: backend default)",
+        )
+        parser.add_argument(
             "--reraise-exceptions",
             action="store_true",
             help="re-raise exceptions to let debugger stop at raise statement",
@@ -400,11 +405,59 @@ class BaseApp(abc.ABC):
         use_deterministic_algorithms = self.get_config_by_path("torch.use_deterministic_algorithms", default=None)
         if use_deterministic_algorithms is not None:
             torch.use_deterministic_algorithms(use_deterministic_algorithms)
+        self.set_torch_logs()
+
+    def set_torch_logs(self):
+        """Applies ``torch.logs``, a TORCH_LOGS-style string such as ``"recompiles,graph_breaks,+dynamo"``."""
+        settings = self.get_config_by_path("torch.logs", default="recompiles", expected_type=str)
+        if settings is None:
+            return
+        if "TORCH_LOGS" in os.environ:
+            logging.warning(f"Ignoring torch.logs={settings!r} because TORCH_LOGS={os.environ['TORCH_LOGS']!r} is set")
+            return
+
+        from torch._logging._internal import log_registry
+
+        modules: Dict[str, Union[int, bool]] = {}
+        for name in (n.strip() for n in settings.split(",")):
+            if not name:
+                continue
+            level = logging.INFO
+            if name[0] in "+-":
+                level = logging.DEBUG if name[0] == "+" else logging.ERROR
+                name = name[1:]
+            if name == "all":
+                # set_logs(all=...) is an alias for the registered "torch" log
+                modules["torch"] = level
+            elif log_registry.is_artifact(name):
+                # not all registry names are set_logs() keyword arguments, so pass them all through `modules`
+                modules[name] = True
+            elif log_registry.is_log(name) or "." in name:
+                modules[name] = level
+            else:
+                raise ValueError(f"Unknown torch.logs entry {name!r}")
+
+        logging.info(f"Setting torch._logging.set_logs from torch.logs={settings!r}")
+        torch._logging.set_logs(modules=modules or None)  # pyright: ignore[reportPrivateImportUsage]
 
     def distributed_init(self, local_rank):
         distributed_backend = self.config["distributed_backend"]
+        timeout_minutes = self.get_config_by_path("distributed_timeout_minutes", default=None)
+        timeout = None
+        if timeout_minutes is not None:
+            if (
+                isinstance(timeout_minutes, bool)
+                or not isinstance(timeout_minutes, Real)
+                or not math.isfinite(timeout_minutes)
+                or timeout_minutes <= 0
+            ):
+                raise ValueError("distributed_timeout_minutes must be positive and finite")
+            timeout = datetime.timedelta(minutes=float(timeout_minutes))
 
-        logging.info(f"Initializing distributed process group with {distributed_backend} backend...")
+        logging.info(
+            f"Initializing distributed process group with {distributed_backend} backend"
+            f" (timeout={timeout if timeout is not None else 'backend default'})..."
+        )
 
         if distributed_backend == "nccl":
             cuda_visible_devices = str(local_rank)
@@ -415,7 +468,7 @@ class BaseApp(abc.ABC):
             device_id = -1
 
         os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
-        torch.distributed.init_process_group(distributed_backend, device_id=device_id)
+        torch.distributed.init_process_group(distributed_backend, device_id=device_id, timeout=timeout)
 
         rank = torch.distributed.get_rank()
         world_size = torch.distributed.get_world_size()
@@ -1486,6 +1539,8 @@ class BaseTrainApp(BaseApp):
         self.on_config_changed(change_set)
 
     def on_config_changed(self, change_set: Dict[str, bool]):
+        if "torch.logs" in change_set:
+            self.set_torch_logs()
         if self.is_train_dataloader_changed(change_set):
             self.discard_train_dataloader()
 
@@ -1584,6 +1639,13 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
 
         return False
 
+    def is_benchmark_deqa_epoch(self, epoch):
+        benchmark_test = self.get_config_by_path("benchmark_test", default=None)
+        if benchmark_test is None:
+            return False
+
+        return any(config and self.is_testset_deqa_epoch(config, epoch) for config in benchmark_test.values())
+
     @property
     def auxiliary_models(self):
         if self._auxiliary_models is None:
@@ -1598,13 +1660,26 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         return self._auxiliary_models
 
     @staticmethod
-    def is_testset_benchmark_epoch(config, epoch):
-        test_interval = config.get("test_interval")
-        if test_interval is None or test_interval == 1:
+    def _is_interval_epoch(test_interval, epoch):
+        if epoch is None or test_interval is None or test_interval == 1:
             return True
         if test_interval == 0:
             return False
         return (epoch + 1) % test_interval == 0
+
+    @classmethod
+    def is_testset_deqa_epoch(cls, config, epoch):
+        """DeQA scoring follows deqa_test_interval, or test_interval when deqa_test_interval is not set."""
+        if not config.get("calc_deqa_score_rgb", False):
+            return False
+        deqa_test_interval = config.get("deqa_test_interval")
+        if deqa_test_interval is None:
+            return cls._is_interval_epoch(config.get("test_interval"), epoch)
+        return cls._is_interval_epoch(deqa_test_interval, epoch)
+
+    @classmethod
+    def is_testset_benchmark_epoch(cls, config, epoch):
+        return cls._is_interval_epoch(config.get("test_interval"), epoch) or cls.is_testset_deqa_epoch(config, epoch)
 
     def add_step_info(
         self, keys: Dict[str, int], values: torch.Tensor, *, qp_num: int = 1, q_index: Optional[torch.Tensor] = None
@@ -1736,7 +1811,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             calc_vif=config.get("calc_vif", False),
             calc_lpips=config.get("calc_lpips", False),
             calc_lrwer_rgb=config.get("calc_lrwer_rgb", False),
-            calc_deqa_score_rgb=config.get("calc_deqa_score_rgb", False),
+            calc_deqa_score_rgb=self.is_testset_deqa_epoch(config, epoch),
             calc_hrd_metrics=config.get("calc_hrd_metrics", False),
             encode_bit_stream=config.get("encode_bit_stream", False),
             calc_bits_estimates=config.get("calc_bits_estimates", False),
@@ -1917,11 +1992,22 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         )
 
         if self.rank <= 0:
-            self.log_benchmark_metrics(results, testset_name=testset_name, config=config, epoch=epoch)
+            # DeQA is enabled for this testset but skipped on this epoch (see deqa_test_interval).
+            skip_deqa = bool(config.get("calc_deqa_score_rgb", False)) and not params.calc_deqa_score_rgb
+            self.log_benchmark_metrics(
+                results,
+                testset_name=testset_name,
+                config=config,
+                epoch=epoch,
+                skip_deqa=skip_deqa,
+            )
 
             anchor_path = config.get("anchor")
             frame_type = "all" if not params.use_i_frame_model else config.get("frame_type", "default")
             if anchor_path:
+                distortion_metrics = config.get("distortion_metrics", ("psnr",))
+                if skip_deqa:
+                    distortion_metrics = [name for name in distortion_metrics if "deqa" not in name]
                 compare_test_with_anchor(
                     epoch=epoch or 0,
                     anchor_results_path=self.resolve_path(anchor_path, default_source="checkpoints_mount"),
@@ -1930,7 +2016,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
                     save_dir=self.save_dir,
                     metrics_writer=self.metrics_writer,
                     frame_type=frame_type,
-                    distortion_metrics=config.get("distortion_metrics", ("psnr",)),
+                    distortion_metrics=distortion_metrics,
                 )
 
             if config.get("calc_ane_divergence", False):
@@ -1993,10 +2079,21 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             testset_name, config=decoder_config, params=params, epoch=epoch, i_frame_model=model, p_frame_model=model
         )
 
-    def log_benchmark_metrics(self, results, *, testset_name: str, config: Mapping[str, Any], epoch: Optional[int]):
+    def log_benchmark_metrics(
+        self,
+        results,
+        *,
+        testset_name: str,
+        config: Mapping[str, Any],
+        epoch: Optional[int],
+        skip_deqa: bool = False,
+    ):
         log_metrics = config.get("log_metrics")
         if log_metrics is None or len(log_metrics) == 0:
             return
+        if skip_deqa:
+            # DeQA is not computed on regular test epochs (see deqa_test_interval).
+            log_metrics = [name for name in log_metrics if "deqa" not in name]
 
         metrics = dict()
         for ds in results.values():

@@ -15,6 +15,8 @@ This repository provides:
 - **C++ entropy coder:** Production-ready, optimized for real-time deployment
 - **Benchmarking tools:** BD-rate computation, RD curves, quality metrics, and anchors
 
+For deployment, see [libmlvc](https://github.com/microsoft/libmlvc), our open-source C++ codec library for MLVC encoding and decoding on NPUs.
+
 ## Installation
 
 ### Setup
@@ -89,7 +91,7 @@ You should move all downloaded datasets to `~/mlvc/data`.
 
 ##### OpenVidHD
 
-Download OpenVidHD data from [here](https://huggingface.co/datasets/nkp37/OpenVid-1M/tree/main/OpenVidHD) - see details and further steps in [BUILD_TRAIN_DATASET.md](video/BUILD_TRAIN_DATASET.md).
+Download OpenVidHD data from [here](https://huggingface.co/datasets/nkp37/OpenVid-1M/tree/main/OpenVidHD) - see details and further steps in [BUILD_TRAIN_DATASET.md](video/docs/BUILD_TRAIN_DATASET.md).
 
 ### Prepare validation and test data
 
@@ -170,6 +172,7 @@ uv run train_video.py \
 ```
 
 Perceptual fine-tuning configuration is shown in [train_video-mlvc-perceptual.yaml](video/configs/train_video-mlvc-perceptual.yaml), MLVC-S model configuration is shown in [train_video-mlvc_s.yaml](video/configs/train_video-mlvc_s.yaml).
+
 
 ## Evaluation
 

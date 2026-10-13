@@ -60,6 +60,9 @@ model:
         ckpt_name: DeQA-Score-Mix3
 
 train:
+  # turn off model compilation, useful for debugging or when using simulated ANE
+  #compile_model: false
+
   # enable gradient checkpointing to reduce memory usage
   use_backprop_checkpoints: false
   # total number of training epochs
@@ -188,7 +191,7 @@ train:
         target_resolution: 540
         patch_size: [ 384, 384 ]
     - { epoch: 398, dataset.n_frames: 48 }
-    - { epoch: 405, dataset.n_frames: 64}
+    - { epoch: 405, dataset.n_frames: 64 }
     - { epoch: 414, learning_rate: 1.e-6 }
     - { epoch: 419, learning_rate: 5.e-7 }
 
@@ -234,9 +237,10 @@ benchmark_test:
 
     # do not test from the beginning
     test_interval: 0
+    deqa_test_interval: 0
 
     # schedule increasing intra_period and enabling BD-rate computation
     schedule:
-      - { epoch: 49, test_interval: 5 }
+      - { epoch: 49, test_interval: 5, deqa_test_interval: 10 }
       - { epoch: 112, test_interval: 1 }
       - { epoch: 300, use_i_frame_model: false }
