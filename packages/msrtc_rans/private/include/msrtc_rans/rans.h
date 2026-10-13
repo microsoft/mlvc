@@ -3,7 +3,7 @@
 
 /**
  * @file msrtc_rans/rans.h
- * @brief Defines raw primitives of rANS alogirthm
+ * @brief Defines raw primitives of rANS algorithm
  */
 
 #pragma once
@@ -25,7 +25,7 @@ using rans_freq_t = uint32_t;
 
 namespace details {
 
-// 64-bit numbers multiplication outputing high 64-bit
+// 64-bit numbers multiplication outputting high 64-bit
 #if defined(_MSC_VER)
 static inline uint64_t Mul64Hi(uint64_t a, uint64_t b)
 {
@@ -80,7 +80,7 @@ struct RansEncSymbol {
     RansEncSymbol(freq_t start, freq_t freq, freq_t scale_bits);
 };
 
-// Raw rANS alogirthm encoder
+// Raw rANS algorithm encoder
 // Sink need to define:
 //  - operator(unit_t) for writing next unit
 template <typename StateType, typename UnitType, typename Sink>
@@ -291,7 +291,7 @@ struct RansDecSymbol {
     RansDecSymbol(freq_t start, freq_t freq) : m_freq(freq), m_start(start) { assert(freq > 0); }
 };
 
-// Raw rANS alogirthm decoder
+// Raw rANS algorithm decoder
 // Source needs to define:
 //  - operator(unit_t&) for reading next unit
 //  - OnOK() for reporting advancing to next symbol

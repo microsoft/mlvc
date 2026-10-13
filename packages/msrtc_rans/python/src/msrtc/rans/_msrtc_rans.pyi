@@ -83,10 +83,10 @@ class RansDecoderStream:
 
 EntropyEncoder = Any
 """
-Entropy encoder implmentation
+Entropy encoder implementation
 """
 
 EntropyDecoder = Any
 """
-Entropy decoder implmentation
+Entropy decoder implementation
 """

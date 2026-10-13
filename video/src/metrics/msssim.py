@@ -29,7 +29,7 @@ class MS_SSIM(nn.Module):
         C2 = (0.03 * data_range) ** 2
         self.register_buffer("_C", torch.asarray((C1, C2), dtype=torch.float))
 
-        # scale weigths
+        # scale weights
         self.register_buffer("_weight5", torch.asarray((0.0448, 0.2856, 0.3001, 0.2363, 0.1333), dtype=torch.float))
         # scale weights for small images according to HM implementation
         self.register_buffer("_weight4", torch.asarray((0.0517, 0.3295, 0.3462, 0.2726), dtype=torch.float))
