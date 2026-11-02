@@ -58,7 +58,7 @@ class VideoWriter:
 class FrameFormatAdapter:
     def __init__(self, dst_format, bit_depth=8):
         if dst_format not in ("420", "444", "rgb"):
-            raise ValueError(f"Unspported dst format: {dst_format}")
+            raise ValueError(f"Unsupported dst format: {dst_format}")
         self.dst_format = dst_format
 
         if 8 < bit_depth <= 16:

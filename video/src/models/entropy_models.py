@@ -377,7 +377,7 @@ class GaussianEncoder(AEHelper):
     def get_laplace_prob(values, scales):
         # noinspection PyUnusedLocal
         def _cdf(inputs):
-            # this is the original function of cdf, but we only care diffence of cdf
+            # this is the original function of cdf, but we only care difference of cdf
             return 0.5 + 0.5 * torch.sign(inputs) * (1.0 - torch.exp(-torch.abs(inputs)))
 
         def _cdf2(inputs):
