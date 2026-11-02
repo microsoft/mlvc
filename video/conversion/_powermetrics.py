@@ -82,7 +82,7 @@ class PowerMetricsCollector:
                     break
 
                 line = process.stdout.readline()
-                if line[0] == 0:
+                if line and line[0] == 0:
                     d = b"".join(buffer)
                     data = plistlib.loads(d)
                     row = PowermetricsSample(

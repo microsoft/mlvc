@@ -4,6 +4,7 @@
 import numpy as np
 import onnx
 import onnxscript
+from onnx import shape_inference
 from onnxscript import ir
 
 DEFAULT_ONNX_PASSES = [
@@ -57,6 +58,16 @@ class OnnxOptimizer:
                 self._qc_workaround_clip_min_only()
             else:
                 raise ValueError(f"Unknown pass: {pass_name}")
+
+        # Passes like qc_workaround_squeeze_gather_4d hand-craft new tensors
+        # and value_info entries without keeping the rest of the graph's
+        # shape info in sync. onnxruntime tolerates the resulting
+        # inconsistency, but AI Hub's strict onnx.checker rejects it with
+        # e.g. "Inferred shape and existing shape differ in rank: (2) vs
+        # (4)". Rebuild value_info from scratch so every saved model is
+        # internally consistent, regardless of which passes ran.
+        del self._model.graph.value_info[:]
+        self._model = shape_inference.infer_shapes(self._model)
         return self._model
 
     def _replace_reciprocal_op(self):
