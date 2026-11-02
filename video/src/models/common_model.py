@@ -240,6 +240,9 @@ class CompressionModel(nn.Module):
 
     @torch.compiler.assume_constant_result
     def get_mask(self, height, width, dtype, device):
+        # Sizes are 0-dim tensors under jit tracing (ONNX/CoreML export) and hash by identity.
+        # Key by value so the cached mask is reused and exported as a constant.
+        height, width = int(height), int(width)
         curr_mask_str = ("spatial", height, width, dtype, device)
         if curr_mask_str not in self.masks or self.force_generate_mask:
             micro_mask = torch.tensor(((1, 0), (0, 1)), dtype=dtype, device=device)
@@ -352,6 +355,7 @@ class CompressionModel(nn.Module):
 
     @torch.compiler.assume_constant_result
     def get_mask_four_parts(self, batch, channel, height, width, dtype, device):
+        batch, channel, height, width = int(batch), int(channel), int(height), int(width)
         curr_mask_str = ("four_parts", batch, channel, height, width, dtype, device)
         with torch.no_grad():
             if curr_mask_str not in self.masks or self.force_generate_mask:
@@ -521,6 +525,7 @@ class CompressionModel(nn.Module):
 
     @torch.compiler.assume_constant_result
     def get_mask_dual(self, batch, channel, height, width, dtype, device):
+        batch, channel, height, width = int(batch), int(channel), int(height), int(width)
         curr_mask_str = ("dual", batch, channel, height, width, dtype, device)
         with torch.no_grad():
             if curr_mask_str not in self.masks or self.force_generate_mask:

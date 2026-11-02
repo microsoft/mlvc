@@ -14,11 +14,13 @@ import math
 import numbers
 import os.path
 import re
+import shutil
 import sys
+import tempfile
 import time
 from functools import cached_property
 from numbers import Number, Real
-from typing import Dict, Any, Set, Optional, Sequence, List, Union, Callable, Mapping
+from typing import Dict, Any, Set, Optional, Sequence, List, Union, Callable, Mapping, Iterable
 
 import numpy as np
 import torch
@@ -46,6 +48,7 @@ from .common import (
     GradNormTracker,
     AuxiliaryModels,
 )
+from .background_writer import BackgroundWriter
 from .encoder_tester import EncoderTestParams, run_encoder_test
 from .mount_point import MountPointResolver
 from .profiling import summarize_model_layers
@@ -848,6 +851,21 @@ class TooLargeGradError(BatchSkipException):
     pass
 
 
+def keep_optimizer_implementation(optimizer: torch.optim.Optimizer):
+    """Restores the configured optimizer implementation after loading state saved with another one."""
+    for group in optimizer.param_groups:
+        for key in ("fused", "foreach", "capturable"):
+            if key in optimizer.defaults:
+                group[key] = optimizer.defaults[key]
+        if not (group.get("fused") or group.get("capturable")):
+            continue
+        for p in group["params"]:
+            state = optimizer.state.get(p)
+            step = state.get("step") if state else None
+            if state and torch.is_tensor(step):
+                state["step"] = step.to(device=p.device, dtype=torch.float32)
+
+
 class BaseTrainApp(BaseApp):
     model: Optional[torch.nn.Module]
     optimizer: Optional[torch.optim.Optimizer]
@@ -873,6 +891,41 @@ class BaseTrainApp(BaseApp):
         self._step_info_timestamp = 0.0
 
         self._auxiliary_models = None
+
+        self._background_writer: Optional[BackgroundWriter] = None
+        self._local_output_dir: Optional[str] = None
+
+    @property
+    def async_save_dir_writes(self) -> bool:
+        return self.get_config_by_path("train.async_save_dir_writes", default=False, expected_type=bool)
+
+    @property
+    def background_writer(self) -> BackgroundWriter:
+        writer = self._background_writer
+        if writer is None:
+            self._background_writer = writer = BackgroundWriter("save_dir writer")
+        return writer
+
+    @property
+    def local_output_dir(self) -> str:
+        path = self._local_output_dir
+        if path is None:
+            self._local_output_dir = path = tempfile.mkdtemp(prefix="train_outputs_")
+        return path
+
+    def close_background_writer(self):
+        if self._background_writer is not None:
+            self._background_writer.close()
+            self._background_writer = None
+        if self._local_output_dir is not None:
+            shutil.rmtree(self._local_output_dir, ignore_errors=True)
+            self._local_output_dir = None
+
+    def run_save_dir_task(self, description: str, task: Callable[[], None]):
+        if self.async_save_dir_writes:
+            self.background_writer.submit(description, task)
+        else:
+            task()
 
     def configure_cmdline_arguments(self, parser: argparse.ArgumentParser):
         mode_group = parser.add_mutually_exclusive_group()
@@ -963,6 +1016,7 @@ class BaseTrainApp(BaseApp):
         optimizer = self.create_optimizer()
         if train_state is not None:
             optimizer.load_state_dict(train_state["optimizer"])
+            keep_optimizer_implementation(optimizer)
 
         return optimizer
 
@@ -1061,7 +1115,7 @@ class BaseTrainApp(BaseApp):
                 config_path=config_path,
                 schedule=schedule,  # type: ignore[arg-type]
                 schedule_path=schedule_path,
-                immutable_path_set={schedule_path, frozen_path},
+                immutable_path_set={schedule_path, frozen_path, *self.get_immutable_config_keys()},
             )
 
             if frozen is not None:
@@ -1073,6 +1127,10 @@ class BaseTrainApp(BaseApp):
     @staticmethod
     def get_config_keys_with_training_schedule():
         return ("train",)
+
+    def get_immutable_config_keys(self) -> tuple[str, ...]:
+        """Config keys that a training schedule must not change."""
+        return ()
 
     @property
     def train_dataloader(self):
@@ -1169,16 +1227,30 @@ class BaseTrainApp(BaseApp):
         os.makedirs(save_dir, exist_ok=True)
 
         ckpt_name = os.path.join(save_dir, self.get_ckpt_name_template().format(epoch))
-        torch.save(model.state_dict(), ckpt_name)
-
         state_name = os.path.join(save_dir, self.get_state_name_template().format(epoch))
-        torch.save(self.get_train_state(epoch), state_name)
+        epoch_marker_name = os.path.join(save_dir, self.get_epoch_marker_name())
+
+        start = time.perf_counter()
+        output_dir = self.local_output_dir if self.async_save_dir_writes else save_dir
+        files = [(os.path.join(output_dir, os.path.basename(name)), name) for name in (ckpt_name, state_name)]
+        torch.save(model.state_dict(), files[0][0])
+        torch.save(self.get_train_state(epoch), files[1][0])
 
         self.on_checkpoint(epoch, is_first_checkpoint=is_first_checkpoint)
 
-        epoch_marker_name = os.path.join(save_dir, self.get_epoch_marker_name())
-        write_epoch_marker(epoch_marker_name, epoch, is_first_checkpoint=is_first_checkpoint)
+        def publish():
+            try:
+                for local_name, name in files:
+                    if local_name != name:
+                        shutil.copyfile(local_name, name)
+            finally:
+                for local_name, name in files:
+                    if local_name != name:
+                        os.unlink(local_name)
+            write_epoch_marker(epoch_marker_name, epoch, is_first_checkpoint=is_first_checkpoint)
 
+        self.run_save_dir_task(f"publishing checkpoint of epoch {epoch}", publish)
+        logging.info(f"checkpoint at epoch {epoch} saved in {time.perf_counter() - start:.1f}s")
         return ckpt_name
 
     def on_checkpoint(self, epoch, *, is_first_checkpoint: bool):
@@ -1190,6 +1262,11 @@ class BaseTrainApp(BaseApp):
             return
 
         save_dir = self.save_dir
+        # the marker still points here if publishing a newer checkpoint failed
+        if read_epoch_marker(os.path.join(save_dir, self.get_epoch_marker_name())) == epoch:
+            logging.warning(f"keeping the checkpoint of epoch {epoch}, which the epoch marker points to")
+            return
+
         state_name = os.path.join(save_dir, self.get_state_name_template().format(epoch))
         try:
             os.unlink(state_name)
@@ -1336,6 +1413,11 @@ class BaseTrainApp(BaseApp):
     def train_step(self, epoch, step, batch):
         raise NotImplementedError()
 
+    def get_trainable_parameters(self) -> Iterable[torch.nn.Parameter]:
+        model = self.get_unwrapped_model(self.model)
+        assert model is not None
+        return model.parameters()
+
     def optimizer_step(self):
         assert self.model is not None
         assert self.optimizer is not None
@@ -1344,7 +1426,7 @@ class BaseTrainApp(BaseApp):
 
         grad_max_value = self.get_config_by_path("train.grad_max_value", default=0, expected_type=numbers.Number)
         if grad_max_value > 0:
-            remove_nan_grad_and_clamp(model.parameters(), grad_max_value)
+            remove_nan_grad_and_clamp(self.get_trainable_parameters(), grad_max_value)
 
         if self.grad_norm_tracker is not None:
             total_norm, grad_scale = self.grad_norm_tracker.track_and_clip_(model.named_parameters())
@@ -1367,13 +1449,13 @@ class BaseTrainApp(BaseApp):
         else:
             grad_max_norm = self.get_config_by_path("train.grad_max_norm", default=0, expected_type=numbers.Number)
             if grad_max_norm > 0:
-                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_max_norm)
+                total_norm = torch.nn.utils.clip_grad_norm_(self.get_trainable_parameters(), grad_max_norm)
                 if not total_norm.isfinite():
                     raise NonFiniteGradError("non-finite gradients")
 
                 self.add_step_metric("grad_norm", total_norm)
             else:
-                remove_nan_grad(model.parameters())
+                remove_nan_grad(self.get_trainable_parameters())
 
         self.optimizer.step()
 
@@ -1508,22 +1590,27 @@ class BaseTrainApp(BaseApp):
         assert self.model is not None
 
         n_epoch = train_config["n_epoch"]
-        for epoch in range(start_epoch, n_epoch):
-            self._apply_training_schedule(epoch)
-            self.train_one_epoch(epoch)
+        try:
+            for epoch in range(start_epoch, n_epoch):
+                self._apply_training_schedule(epoch)
+                self.train_one_epoch(epoch)
 
-            if self.rank <= 0:
-                self.checkpoint(epoch, is_first_checkpoint=is_first_checkpoint)
-                if is_first_checkpoint:
-                    is_first_checkpoint = False
-                else:
-                    self.prune_checkpoint(epoch - 1)
+                if self.rank <= 0:
+                    self.checkpoint(epoch, is_first_checkpoint=is_first_checkpoint)
+                    if is_first_checkpoint:
+                        is_first_checkpoint = False
+                    elif not self.is_checkpoint_retained(epoch - 1):
+                        self.run_save_dir_task(
+                            f"pruning checkpoint of epoch {epoch - 1}", lambda e=epoch - 1: self.prune_checkpoint(e)
+                        )
 
-            if self.is_benchmark_epoch(epoch):
-                eval_model = self.get_unwrapped_model(self.model)
-                assert eval_model is not None
-                self.test_model(epoch, eval_model)
-                self._benchmarked_epoch.add(epoch)
+                if self.is_benchmark_epoch(epoch):
+                    eval_model = self.get_unwrapped_model(self.model)
+                    assert eval_model is not None
+                    self.test_model(epoch, eval_model)
+                    self._benchmarked_epoch.add(epoch)
+        finally:
+            self.close_background_writer()
 
     def _apply_training_schedule(self, epoch):
         change_set = dict()
@@ -1978,17 +2065,38 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             output_json_path = f"metrics_{testset_name}.json"
         output_json_path = os.path.join(self.save_dir, output_json_path)
 
+        # only train() closes the background writer
+        async_reporting = self.config.get("mode") == "train" and self.rank <= 0 and self.async_save_dir_writes
+        results_json_path = output_json_path
+        if async_reporting:
+            results_json_path = os.path.join(self.local_output_dir, os.path.basename(output_json_path))
+
         testset_desc_filename = self.resolve_path(config["config"], default_source=".")
+        target_config = config.get("target")
+        if target_config is not None:
+            if not isinstance(target_config, Mapping):
+                raise ValueError(f"{testset_name}: target must be a YAML object")
+            missing = [name for name in ("config", "data_path") if not target_config.get(name)]
+            if missing:
+                raise ValueError(f"{testset_name}: target is missing required fields: {', '.join(missing)}")
+            target_desc_filename = self.resolve_path(target_config["config"], default_source=".")
+            target_root = self.resolve_path(target_config["data_path"])
+        else:
+            target_desc_filename = None
+            target_root = None
+
         results = run_encoder_test(
             params,
             rank=self.rank,
             testset_name=testset_name,
             testset_desc_filename=testset_desc_filename,
             testset_root=self.resolve_path(config.get("data_path")),
+            target_desc_filename=target_desc_filename,
+            target_root=target_root,
             i_frame_model=i_frame_model,
             p_frame_model=p_frame_model,
             auxiliary_models=self.auxiliary_models,
-            output_path=output_json_path,
+            output_path=results_json_path,
         )
 
         if self.rank <= 0:
@@ -2004,20 +2112,32 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
 
             anchor_path = config.get("anchor")
             frame_type = "all" if not params.use_i_frame_model else config.get("frame_type", "default")
-            if anchor_path:
-                distortion_metrics = config.get("distortion_metrics", ("psnr",))
-                if skip_deqa:
-                    distortion_metrics = [name for name in distortion_metrics if "deqa" not in name]
-                compare_test_with_anchor(
-                    epoch=epoch or 0,
-                    anchor_results_path=self.resolve_path(anchor_path, default_source="checkpoints_mount"),
-                    test_results_path=output_json_path,
-                    testset_name=testset_name,
-                    save_dir=self.save_dir,
-                    metrics_writer=self.metrics_writer,
-                    frame_type=frame_type,
-                    distortion_metrics=distortion_metrics,
-                )
+            distortion_metrics = config.get("distortion_metrics", ("psnr",))
+            if skip_deqa:
+                distortion_metrics = [name for name in distortion_metrics if "deqa" not in name]
+
+            def report():
+                try:
+                    if anchor_path:
+                        compare_test_with_anchor(
+                            epoch=epoch or 0,
+                            anchor_results_path=self.resolve_path(anchor_path, default_source="checkpoints_mount"),
+                            test_results_path=results_json_path,
+                            testset_name=testset_name,
+                            save_dir=self.save_dir,
+                            metrics_writer=self.metrics_writer,
+                            frame_type=frame_type,
+                            distortion_metrics=distortion_metrics,
+                        )
+                finally:
+                    if results_json_path != output_json_path:
+                        shutil.copyfile(results_json_path, output_json_path)
+                        os.unlink(results_json_path)
+
+            if async_reporting:
+                self.background_writer.submit(f"{testset_name} results and BD-rate", report)
+            else:
+                report()
 
             if config.get("calc_ane_divergence", False):
                 self._log_ane_divergence_metrics(results, testset_name=testset_name, epoch=epoch)

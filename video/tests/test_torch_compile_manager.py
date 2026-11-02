@@ -237,6 +237,37 @@ def test_eval_scope_runs_compiled_modules_eagerly(manager):
     assert len(traces) == 1
 
 
+@pytest.mark.parametrize("after", [None, 1])
+def test_epoch_scope_skips_guard_evaluation_from_warmup_step_until_exit(manager, config, after):
+    config["train"]["compile_skip_guard_eval_after_steps"] = after
+    traces = []
+
+    def counting_backend(graph_module, example_inputs):
+        traces.append(graph_module)
+        return graph_module.forward
+
+    model = Linear()
+    model.compile(backend=counting_backend, fullgraph=True, dynamic=False)
+    model(torch.ones(2))
+
+    with manager.epoch_scope() as on_step:
+        on_step(0)
+        model(torch.ones(2))
+        on_step(1)
+        model(torch.ones(2))
+        if after is None:
+            model(torch.ones(3))
+        else:
+            # inputs that need a new graph raise rather than recompiling while guards are skipped
+            with pytest.raises(RuntimeError, match="skip_guard_eval_unsafe"):
+                model(torch.ones(3))
+    assert len(traces) == (2 if after is None else 1)
+
+    assert not torch._dynamo.eval_frame._stance.skip_guard_eval_unsafe
+    model(torch.ones(3))
+    assert len(traces) == 2
+
+
 @pytest.mark.parametrize("enabled", [True, False])
 def test_detach_carried_clones_only_when_compiling(manager, config, enabled):
     config["train"]["compile_model"] = enabled

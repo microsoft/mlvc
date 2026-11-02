@@ -124,15 +124,22 @@ class EncoderTestTask:
 
     lr_model_data_filepath: Optional[dict] = None
     mask_path_root: Optional[str] = None
+    target_type: Optional[str] = None
+    target_path: Optional[str] = None
 
 
-def create_frame_reader(task):
-    if task.src_type == "png":
-        reader = PNGReader(task.src_path, task.src_width, task.src_height)
-    elif task.src_type == "yuv420":
-        reader = YUVReader(task.src_path, task.src_width, task.src_height)
+def create_frame_reader(task, *, target=False):
+    src_type = task.target_type if target else task.src_type
+    src_path = task.target_path if target else task.src_path
+    if src_path is None:
+        raise ValueError(f"No {'target' if target else 'source'} path for {task.dataset_name}/{task.seq_name}")
+
+    if src_type == "png":
+        reader = PNGReader(src_path, task.src_width, task.src_height)
+    elif src_type == "yuv420":
+        reader = YUVReader(src_path, task.src_width, task.src_height)
     else:
-        raise ValueError("Unknown source format")
+        raise ValueError(f"Unknown {'target' if target else 'source'} format: {src_type}")
 
     return functools.partial(reader.read_one_frame, dst_format="420" if task.params.is_yuv420 else "rgb")
 
@@ -680,10 +687,18 @@ class EncoderTestTaskProcessor:
             for _ in range(params.frame_step - 1):
                 self.read_one_frame()
 
-        image = self.read_one_frame()
-        assert image is not None
-        x, image, padding = prepare_frame(
-            image,  # type: ignore[reportArgumentType]
+        frame = self.read_one_frame()
+        if frame is None:
+            raise ValueError(f"Source ended before frame {frame_idx} for {task.dataset_name}/{task.seq_name}")
+        if task.target_path is not None:
+            source_frame, target_frame = frame
+        else:
+            source_frame = frame
+            target_frame = None
+
+        assert source_frame is not None
+        x, source_image, padding = prepare_frame(
+            source_frame,  # type: ignore[reportArgumentType]
             is_yuv420=params.is_yuv420,
             precision="fp16" if params.float16 else "fp32",
             device=self.device,
@@ -693,6 +708,24 @@ class EncoderTestTaskProcessor:
             target_height=self.target_height,
             target_width=self.target_width,
         )
+        metric_image = source_image
+        if target_frame is not None:
+            _, metric_image, target_padding = prepare_frame(
+                target_frame,  # type: ignore[reportArgumentType]
+                is_yuv420=params.is_yuv420,
+                precision="fp16" if params.float16 else "fp32",
+                device=self.device,
+                padding_size=self.padding_size,
+                padding_mode=params.padding_mode,
+                padding_alignment=params.padding_alignment,
+                target_height=self.target_height,
+                target_width=self.target_width,
+            )
+            if target_padding != padding:
+                raise ValueError(
+                    f"Target padding differs from source for {task.dataset_name}/{task.seq_name}: "
+                    f"{target_padding} vs {padding}"
+                )
 
         if self._mask_reader is not None:
             mask = self._mask_reader(frame_idx * params.frame_step)
@@ -722,8 +755,8 @@ class EncoderTestTaskProcessor:
             if mask is not None:
                 mask = mask.expand(batch_size, -1, -1, -1)
 
-        height = image[0].shape[2]
-        width = image[0].shape[3]
+        height = source_image[0].shape[2]
+        width = source_image[0].shape[3]
 
         frame_pixel_num = width * height
         if self.frame_pixel_num == 0:
@@ -816,7 +849,7 @@ class EncoderTestTaskProcessor:
 
             self._add_frame_stat("bpp_estimate", bits_estimate / (width * height))
 
-        extra_stats = self._process_rec(x_hat, image, mask)
+        extra_stats = self._process_rec(x_hat, metric_image, mask)
         frame_end_time = time.time()
 
         if params.verbose >= 2:
@@ -1332,9 +1365,27 @@ class EncoderTestDataset(torch.utils.data.IterableDataset):
 
     def get_frames(self):
         for task in self.task_list:
-            reader = create_frame_reader(task)
-            for _ in range(task.n_frames):
-                yield reader()
+            source_reader = create_frame_reader(task)
+            target_reader = create_frame_reader(task, target=True) if task.target_path is not None else None
+            for frame_idx in range(task.n_frames):
+                source_frame = source_reader()
+                if target_reader is None:
+                    yield source_frame
+                    continue
+
+                target_frame = target_reader()
+                if self._is_missing_frame(target_frame):
+                    raise ValueError(
+                        f"Target ended before frame {frame_idx} for {task.dataset_name}/{task.seq_name}: "
+                        f"{task.target_path}"
+                    )
+                yield source_frame, target_frame
+
+    @staticmethod
+    def _is_missing_frame(frame):
+        if isinstance(frame, tuple):
+            return any(component is None for component in frame)
+        return frame is None
 
 
 class EncoderTester:
@@ -1415,12 +1466,80 @@ class EncoderTester:
             rate_list = rate_list[seq_base_name]
         return rate_list
 
-    def _build_task_list(self, testset_desc_filename: str, *, testset_root: Optional[str] = None):
-        with open(testset_desc_filename, "rt", encoding="utf-8") as f:
-            testset_desc = json.load(f)
+    @staticmethod
+    def _load_testset_description(filename: str):
+        with open(filename, "rt", encoding="utf-8") as f:
+            description = json.load(f)
+        if not isinstance(description.get("test_classes"), dict):
+            raise ValueError(f"{filename}: missing 'test_classes' object")
+        return description
+
+    @staticmethod
+    def _active_test_classes(description):
+        return {name: value for name, value in description["test_classes"].items() if value.get("test", True)}
+
+    def _validate_target_description(self, source, target, source_path, target_path):
+        source_classes = self._active_test_classes(source)
+        target_classes = self._active_test_classes(target)
+        if source_classes.keys() != target_classes.keys():
+            raise ValueError(
+                f"Target test classes differ from source ({source_path} vs {target_path}): "
+                f"source={sorted(source_classes)}, target={sorted(target_classes)}"
+            )
+
+        fallback_frame_rate = self.params.frame_rate or 30
+        for class_name, source_class in source_classes.items():
+            target_class = target_classes[class_name]
+            if source_class["src_type"] != target_class["src_type"]:
+                raise ValueError(
+                    f"Target src_type differs for class {class_name} ({source_path} vs {target_path}): "
+                    f"{source_class['src_type']} vs {target_class['src_type']}"
+                )
+
+            source_sequences = source_class["sequences"]
+            target_sequences = target_class["sequences"]
+            if source_sequences.keys() != target_sequences.keys():
+                raise ValueError(
+                    f"Target sequence IDs differ for class {class_name} ({source_path} vs {target_path}): "
+                    f"source_only={sorted(source_sequences.keys() - target_sequences.keys())}, "
+                    f"target_only={sorted(target_sequences.keys() - source_sequences.keys())}"
+                )
+
+            for seq_name, source_seq in source_sequences.items():
+                target_seq = target_sequences[seq_name]
+                for field in ("width", "height", "frames"):
+                    if source_seq[field] != target_seq[field]:
+                        raise ValueError(
+                            f"Target {field} differs for {class_name}/{seq_name} "
+                            f"({source_path} vs {target_path}): {source_seq[field]} vs {target_seq[field]}"
+                        )
+                source_fps = float(source_seq.get("frame_rate", fallback_frame_rate))
+                target_fps = float(target_seq.get("frame_rate", fallback_frame_rate))
+                if source_fps != target_fps:
+                    raise ValueError(
+                        f"Target frame_rate differs for {class_name}/{seq_name} "
+                        f"({source_path} vs {target_path}): {source_fps} vs {target_fps}"
+                    )
+
+    def _build_task_list(
+        self,
+        testset_desc_filename: str,
+        *,
+        testset_root: Optional[str] = None,
+        target_desc_filename: Optional[str] = None,
+        target_root: Optional[str] = None,
+    ):
+        testset_desc = self._load_testset_description(testset_desc_filename)
 
         testset_root = testset_root or testset_desc.get("root_path", None)
         testset_root = testset_root or os.path.dirname(testset_desc_filename)
+        target_desc = None
+        if target_desc_filename is not None:
+            target_desc = self._load_testset_description(target_desc_filename)
+            self._validate_target_description(testset_desc, target_desc, testset_desc_filename, target_desc_filename)
+            target_root = target_root or target_desc.get("root_path", None)
+            target_root = target_root or os.path.dirname(target_desc_filename)
+            logging.info("Using benchmark target description %s with root %s", target_desc_filename, target_root)
 
         params = self.params
         max_batch_size = max(int(params.max_batch_size), 1)
@@ -1444,6 +1563,7 @@ class EncoderTester:
             if not dataset_desc.get("test", True):
                 continue
             src_type = dataset_desc["src_type"]
+            target_dataset_desc = target_desc["test_classes"][dataset_name] if target_desc is not None else None
             if params.decoder_format:
                 decoder_format = params.decoder_format
             else:
@@ -1568,6 +1688,12 @@ class EncoderTester:
                         decoder_format=decoder_format,
                         lr_model_data_filepath=lr_model_data_filepath,
                         mask_path_root=mask_path_root,
+                        target_type=target_dataset_desc["src_type"] if target_dataset_desc is not None else None,
+                        target_path=(
+                            os.path.join(target_root, target_dataset_desc["base_path"], seq_name)
+                            if target_dataset_desc is not None and target_root is not None
+                            else None
+                        ),
                     )
 
                     yield task
@@ -1639,8 +1765,25 @@ class EncoderTester:
 
         return output
 
-    def run(self, testset_name, testset_desc_filename: str, *, testset_root: Optional[str] = None):
-        task_list = list(self._build_task_list(testset_desc_filename, testset_root=testset_root))
+    def run(
+        self,
+        testset_name,
+        testset_desc_filename: str,
+        *,
+        testset_root: Optional[str] = None,
+        target_desc_filename: Optional[str] = None,
+        target_root: Optional[str] = None,
+    ):
+        if target_desc_filename is not None and self.params.calc_ane_divergence:
+            raise ValueError("Benchmark targets cannot be combined with calc_ane_divergence")
+        task_list = list(
+            self._build_task_list(
+                testset_desc_filename,
+                testset_root=testset_root,
+                target_desc_filename=target_desc_filename,
+                target_root=target_root,
+            )
+        )
         if len(task_list) == 0:
             raise ValueError(f"No test sequences found in testset {testset_name}")
 
@@ -1683,12 +1826,20 @@ def run_encoder_test(
     p_frame_model: Union[nn.Module, Callable[[EncoderTestTask], nn.Module], None],
     auxiliary_models: Optional[AuxiliaryModels] = None,
     testset_root: Optional[str] = None,
+    target_desc_filename: Optional[str] = None,
+    target_root: Optional[str] = None,
     output_path: Optional[str] = None,
 ):
     tester = EncoderTester(
         rank, params, i_frame_model=i_frame_model, p_frame_model=p_frame_model, auxiliary_models=auxiliary_models
     )
-    result = tester.run(testset_name, testset_desc_filename, testset_root=testset_root)
+    result = tester.run(
+        testset_name,
+        testset_desc_filename,
+        testset_root=testset_root,
+        target_desc_filename=target_desc_filename,
+        target_root=target_root,
+    )
 
     if output_path is not None and rank <= 0:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)

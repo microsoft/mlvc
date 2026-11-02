@@ -19,6 +19,8 @@ import torch.nn as nn
 
 _UNSET = object()
 
+SKIP_GUARD_EVAL_AFTER_STEPS_KEY = "train.compile_skip_guard_eval_after_steps"
+
 
 def _lookup(config: Optional[Mapping], key_path: str, default: Any = None) -> Any:
     value: Any = config
@@ -46,6 +48,7 @@ class CompileSettings:
     BACKEND_KEY = "train.compile_backend"
     MODE_KEY = "train.compile_mode"
     OPTIONS_KEY = "train.compile_options"
+    FAST_CUDAGRAPH_RECORDING_KEY = "train.compile_fast_cudagraph_recording"
     CONFIG_KEYS = (BACKEND_KEY, MODE_KEY, OPTIONS_KEY, ENABLED_KEY)
 
     enabled: bool = True
@@ -56,6 +59,8 @@ class CompileSettings:
     fullgraph: bool = True
     # Static shapes; callers normalize input strides (see with_standard_strides) to avoid recompiles.
     dynamic: bool = False
+    # Index CUDA graph tree outputs to avoid O(clip length^2) re-recording (see cudagraph_patches).
+    fast_cudagraph_recording: bool = False
 
     def __post_init__(self):
         if self.mode is not None and self.options is not None:
@@ -70,7 +75,14 @@ class CompileSettings:
         # torch.compile accepts either mode or options; only default the mode for inductor without options.
         default_mode = "reduce-overhead" if options is None and backend == "inductor" else None
         mode = _typed(config, cls.MODE_KEY, default_mode, (str, type(None)))
-        return cls(enabled=enabled, backend=backend, mode=mode, options=options)
+        fast_cudagraph_recording = _typed(config, cls.FAST_CUDAGRAPH_RECORDING_KEY, False, bool)
+        return cls(
+            enabled=enabled,
+            backend=backend,
+            mode=mode,
+            options=options,
+            fast_cudagraph_recording=fast_cudagraph_recording,
+        )
 
     @property
     def uses_cudagraphs(self) -> bool:
@@ -206,6 +218,10 @@ class TorchCompileManager:
         if self._device().type != "cuda":
             raise RuntimeError(f"{CompileSettings.ENABLED_KEY} requires a CUDA device")
         kwargs = settings.compile_kwargs()
+        if settings.fast_cudagraph_recording and settings.uses_cudagraphs:
+            from .cudagraph_patches import patch_cudagraph_tree_alias_lookup
+
+            patch_cudagraph_tree_alias_lookup()
         logging.info(f"Compiling {name} forward pass with torch.compile {kwargs}")
         module.compile(**kwargs)
         return module
@@ -245,6 +261,29 @@ class TorchCompileManager:
         # Force eager mode to avoid recompiling the module; this has no noticeable performance penalty.
         with torch.compiler.set_stance("force_eager"):
             yield
+
+    @contextlib.contextmanager
+    def epoch_scope(self) -> Iterator[Callable[[int], None]]:
+        """Yields a per-step callback that stops full guard evaluation from step
+        ``train.compile_skip_guard_eval_after_steps`` until the epoch ends. Every input variant must appear before
+        that step: afterwards an input that fails only a skipped guard would run a wrong graph.
+        """
+        after = _typed(self._config(), SKIP_GUARD_EVAL_AFTER_STEPS_KEY, None, (int, type(None)))
+        skipping = False
+
+        def on_step(step: int):
+            nonlocal skipping
+            if after is None or skipping or step < after or not self.enabled:
+                return
+            logging.info(f"Evaluating only the torch.compile guards that select among compiled graphs from step {step}")
+            torch.compiler.set_stance("default", skip_guard_eval_unsafe=True)
+            skipping = True
+
+        try:
+            yield on_step
+        finally:
+            if skipping:
+                torch.compiler.set_stance("default")
 
     def detach_carried(self, tensors: Mapping[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Detaches tensors carried into the next compiled call.

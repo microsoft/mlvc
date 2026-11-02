@@ -15,10 +15,11 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 from src.datasets.video_dataset import FastVideoFolder
 from src.datasets.weighted_dataset import WeightedDataset
 from src.transforms.functional import rgb2ycbcr
-from src.utils.app import BaseTrainVideoApp
+from src.utils.app import BaseTrainVideoApp, keep_optimizer_implementation
 from src.utils.ane_mode import drift_simulation
+from src.utils.flat_parameters import FlatParameters
 from src.utils.stream_helper import get_state_dict
-from src.utils.torch_compile import TorchCompileManager, with_standard_strides
+from src.utils.torch_compile import CompileSettings, TorchCompileManager, with_standard_strides
 
 
 class ForwardPassWrapper(nn.Module):
@@ -32,6 +33,31 @@ class ForwardPassWrapper(nn.Module):
 
     def forward(self, forward: Callable, *args, **kwargs):
         return forward(self.module, *args, **kwargs)
+
+
+def stack_frame_metrics(loss: torch.Tensor, rd: dict, ld: dict, **extra: Optional[torch.Tensor]):
+    metrics = dict(loss=loss.detach())
+    metrics.update((n, v.detach()) for n, v in rd.items() if n.startswith("bpp_"))
+    metrics.update((n, v.detach()) for n, v in ld.items())
+    metrics.update((n, v.detach()) for n, v in extra.items() if v is not None)
+
+    metric_names = {n: i for i, n in enumerate(metrics.keys())}
+    return metric_names, torch.stack(list(metrics.values()), dim=-1)
+
+
+class FrameLossStep(nn.Module):
+    """Runs the codec model and the frame loss, so that torch.compile captures both in one graph."""
+
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x, dpb, *, q_index, fa_idx, loss_func, target, lambdas, mask=None, **kwargs):
+        rd = self.model(x, dpb, q_index=q_index, fa_idx=fa_idx, **kwargs)
+        ld = loss_func(rd, target, lambdas=lambdas, mask=mask)
+        loss = ld.pop("loss")
+        metric_names, metric_values = stack_frame_metrics(loss, rd, ld)
+        return loss.mean(), rd["dpb"], metric_names, metric_values
 
 
 class FrameGradClipper:
@@ -90,15 +116,19 @@ class TrainVideoApp(BaseTrainVideoApp):
         self._per_frame_qp_prob = 0.0
         self._qp_transition_prob = 0.0
         self.loss_func = None
+        self._loss_func_args: Optional[dict[str, Any]] = None
         self.only_me = False
         self.frame_index_map: Optional[tuple[int, ...]] = None
         self.i_qp_map = None
         self.distortion_weights = None
         self.clear_grad_for_y_q = False
+        self._y_q_parameter_names: Optional[list[str]] = None
         self._brightness_aug = None
 
         self._i_frame_model = None
         self._optic_flow_loss = None
+        self._on_train_step: Optional[Callable[[int], None]] = None
+        self._optimize_ddp: Optional[Any] = None
 
     def close(self):
         super().close()
@@ -145,8 +175,19 @@ class TrainVideoApp(BaseTrainVideoApp):
         assert isinstance(config, dict)
         return create_video_model(config)
 
+    @property
+    def use_flat_parameters(self) -> bool:
+        return self.get_config_by_path("train.flat_parameters", default=False, expected_type=bool)
+
+    @property
+    def compile_loss(self) -> bool:
+        return self.get_config_by_path("train.compile_loss", default=True, expected_type=bool)
+
     def load_model(self, model_state, pretrained: Optional[bool] = None):
         model = super().load_model(model_state, pretrained)
+        if self.use_flat_parameters or self.compile_loss:
+            # make_train_model compiles the wrapper that runs the model instead
+            return model
         return self.torch_compile.compile(model, "training model")
 
     # Non-compile config keys read by Python-level guards in the compiled forward; changing them invalidates graphs.
@@ -166,9 +207,20 @@ class TrainVideoApp(BaseTrainVideoApp):
             extra_reset_keys=self.TORCH_COMPILE_GUARD_KEYS,
         )
 
+    def get_immutable_config_keys(self) -> tuple[str, ...]:
+        return (
+            *super().get_immutable_config_keys(),
+            # the patch is installed at the first compile and stays for the rest of the process
+            CompileSettings.FAST_CUDAGRAPH_RECORDING_KEY,
+            # the training wrappers are built, and DDP is configured, when training starts
+            "train.flat_parameters",
+            "train.compile_loss",
+            "train.ddp_gradient_as_bucket_view",
+        )
+
     def on_config_changed(self, change_set: dict[str, bool]):
         super().on_config_changed(change_set)
-        self.torch_compile.on_config_changed(change_set, self.get_unwrapped_model(self.model))
+        self.torch_compile.on_config_changed(change_set, self._compiled_model)
 
     def _resolve_nested_ckpt_paths(self, config):
         """Recursively resolve every ckpt_path string in a config tree. Needed for MoE models."""
@@ -216,6 +268,17 @@ class TrainVideoApp(BaseTrainVideoApp):
         return True
 
     def make_train_model(self, model):
+        if self.use_flat_parameters:
+            # Under DDP, dynamo's DDPOptimizer splits compiled graphs at gradient bucket boundaries; the parameter
+            # views would then cross split points as non-static CUDA graph inputs that are copied on every replay.
+            if self._optimize_ddp is None:
+                self._optimize_ddp = torch._dynamo.config.optimize_ddp
+            torch._dynamo.config.optimize_ddp = False
+            model = FlatParameters(model)
+        if self.compile_loss:
+            model = FrameLossStep(model)
+        if self.use_flat_parameters or self.compile_loss:
+            model = self.torch_compile.compile(model, f"training model ({type(model).__name__})")
         # model will be wrapped into DDP in prepare_for_epoch
         return ForwardPassWrapper(model)
 
@@ -225,7 +288,48 @@ class TrainVideoApp(BaseTrainVideoApp):
             model = model.module
         if isinstance(model, ForwardPassWrapper):
             model = model.module
+        if isinstance(model, FrameLossStep):
+            model = model.model
+        if isinstance(model, FlatParameters):
+            model = model.module
         return model
+
+    @property
+    def _compiled_model(self) -> Optional[nn.Module]:
+        """The module compiled for training: the codec model or the wrapper that runs it."""
+        model = self.model
+        if isinstance(model, DistributedDataParallel):
+            model = model.module
+        if isinstance(model, ForwardPassWrapper):
+            model = model.module
+        return model
+
+    @property
+    def flat_parameters(self) -> Optional[FlatParameters]:
+        model = self._compiled_model
+        if isinstance(model, FrameLossStep):
+            model = model.model
+        return model if isinstance(model, FlatParameters) else None
+
+    def get_trainable_parameters(self):
+        flat_parameters = self.flat_parameters
+        if flat_parameters is not None:
+            return list(flat_parameters.flats)
+        return super().get_trainable_parameters()
+
+    def load_optimizer(self, train_state):
+        flat_parameters = self.flat_parameters
+        if flat_parameters is not None and train_state is not None:
+            train_state = dict(train_state, optimizer=flat_parameters.flatten_optimizer_state(train_state["optimizer"]))
+        return super().load_optimizer(train_state)
+
+    def get_train_state(self, epoch):
+        train_state = super().get_train_state(epoch)
+        flat_parameters = self.flat_parameters
+        if flat_parameters is not None:
+            # Saved in the per-parameter layout so that training can resume with or without flat parameters.
+            train_state["optimizer"] = flat_parameters.unflatten_optimizer_state(train_state["optimizer"])
+        return train_state
 
     def create_optimizer(self):
         assert self.model is not None
@@ -244,6 +348,12 @@ class TrainVideoApp(BaseTrainVideoApp):
         optimizer_type = getattr(torch.optim, optimizer_type)
 
         me_module_names = getattr(model, "me_module_names", None)
+        flat_parameters = self.flat_parameters
+        if flat_parameters is not None:
+            if me_module_names is not None:
+                raise ValueError("train.flat_parameters does not support per-module optimizer parameter groups")
+            return optimizer_type(flat_parameters.flats.parameters(), **kwargs)
+
         if me_module_names is not None:
             me_params = list()
             remainder = list()
@@ -427,6 +537,15 @@ class TrainVideoApp(BaseTrainVideoApp):
         if self.rank <= 0:
             self.metrics_writer.add_scalar("lr", lr, epoch)
 
+        self.drift_loss_weight = float(config.get("drift_loss_weight", 0.0))
+        self.drift_feature_loss_weight = float(config.get("drift_feature_loss_weight", 0.0))
+        self.use_drift_loss = self.drift_loss_weight > 0 or self.drift_feature_loss_weight > 0
+        if self.use_drift_loss and self._compiled_model is not self.get_unwrapped_model(self.model):
+            # The drift decoder bypasses the wrappers. Removing them unfreezes all parameters, so it comes first.
+            self._remove_model_wrappers("drift losses")
+        if self.flat_parameters is not None:
+            self._check_flat_parameters_support(config)
+
         model = self.get_unwrapped_model(self.model)
         assert model is not None
         if transfer_weights != "none":
@@ -445,8 +564,8 @@ class TrainVideoApp(BaseTrainVideoApp):
             modules_to_train = config.get("modules_to_train")
             if modules_to_train is not None:
                 self._require_grad(model, modules_to_train, invert=False)
-            else:
-                # train all parameters
+            elif self.flat_parameters is None:
+                # train all parameters (flat parameters always train all of them)
                 model.requires_grad_()
         else:
             assert False
@@ -476,8 +595,8 @@ class TrainVideoApp(BaseTrainVideoApp):
 
         from src.losses.codec import get_loss_func
 
-        self.loss_func = get_loss_func(
-            loss_type,
+        loss_args = dict(
+            loss_type=loss_type,
             is_yuv420=self.is_yuv420,
             mse_lambda_exponent=config.get("mse_lambda_exponent"),
             bpp_weight=config.get("bpp_loss_weight"),
@@ -494,6 +613,13 @@ class TrainVideoApp(BaseTrainVideoApp):
             roi_bg_ratio=config.get("roi_bg_ratio"),
             p_roi=config.get("p_roi"),
         )
+        # A compiled loss is guarded on the loss module: keep it while its configuration is unchanged, and drop the
+        # graphs compiled with the previous one when it changes.
+        if not (self.compile_loss and self.loss_func is not None and loss_args == self._loss_func_args):
+            if self.compile_loss and self.loss_func is not None:
+                self.torch_compile.reset()
+            self.loss_func = get_loss_func(**loss_args)
+            self._loss_func_args = loss_args
         self.loss_func.to(self.device)
 
         self.clear_grad_for_y_q = config.get("clear_grad_for_y_q", False)
@@ -580,9 +706,6 @@ class TrainVideoApp(BaseTrainVideoApp):
 
         self.i_frame_dropout = config.get("i_frame_dropout", 0.0)
 
-        self.drift_loss_weight = float(config.get("drift_loss_weight", 0.0))
-        self.drift_feature_loss_weight = float(config.get("drift_feature_loss_weight", 0.0))
-        self.use_drift_loss = self.drift_loss_weight > 0 or self.drift_feature_loss_weight > 0
         self.drift_mode = config.get("drift_mode", "ane")
         _bptt = config.get("drift_bptt", 0)
         self.drift_bptt = 10**9 if _bptt == "full" else int(_bptt)
@@ -647,6 +770,72 @@ class TrainVideoApp(BaseTrainVideoApp):
 
         return torch.linspace(i_qp_min, i_qp_max, qp_num, dtype=torch.int64, device=self.device)
 
+    def _check_flat_parameters_support(self, config):
+        unsupported = {
+            "param_group": config.get("param_group") not in (None, "both", "all"),
+            "modules_to_train": config.get("modules_to_train") is not None,
+            "transfer_weights": config["transfer_weights"] != "none",
+            "grad_norm_tracker": self.grad_norm_tracker is not None,
+            # eager activation checkpointing would recompute with the frozen original parameters
+            "train.compile_model: false": not self.torch_compile.enabled,
+            # experts can share submodules, so a flat tensor could hold parameters that the active expert doesn't use
+            "mixture-of-experts models": getattr(self.get_unwrapped_model(self.model), "num_experts", 1) > 1,
+        }
+        names = [name for name, is_used in unsupported.items() if is_used]
+        if names:
+            raise ValueError(f"train.flat_parameters does not support {', '.join(names)}")
+
+    def _remove_model_wrappers(self, reason: str):
+        """Continues training without flat parameters and the compiled loss, which do not support ``reason``."""
+        assert self.optimizer is not None
+        model = self.get_unwrapped_model(self.model)
+        assert model is not None
+        logging.warning(
+            f"train.flat_parameters and train.compile_loss do not support {reason}; continuing without them"
+        )
+
+        optimizer_state = self.optimizer.state_dict()
+        flat_parameters = self.flat_parameters
+        if flat_parameters is not None:
+            optimizer_state = flat_parameters.unflatten_optimizer_state(optimizer_state)
+            with torch.no_grad():
+                for p in model.parameters():
+                    # own storage instead of views of the flat tensors
+                    p.data = p.data.clone()
+            model.requires_grad_()
+            if self._optimize_ddp is not None:
+                torch._dynamo.config.optimize_ddp = self._optimize_ddp
+
+        # DDP is rebuilt in prepare_for_epoch
+        self.model = None
+        self.optimizer = None
+        self.torch_compile.reset()
+        self.model = ForwardPassWrapper(self.torch_compile.compile(model, "training model"))
+        self.optimizer = optimizer = self.create_optimizer()
+        optimizer.load_state_dict(optimizer_state)
+        keep_optimizer_implementation(optimizer)
+
+    def _clear_grad_for_y_q(self):
+        model = self.get_unwrapped_model(self.model)
+        assert model is not None
+        flat_parameters = self.flat_parameters
+        if flat_parameters is None:
+            model.clear_grad_for_y_q()  # type: ignore[operator]
+            return
+
+        names = self._y_q_parameter_names
+        if names is None:
+            # The model clears the gradients of its own parameters, which the flat tensors replace in training:
+            # find out once which parameters it clears.
+            parameters = dict(model.named_parameters())
+            for p in parameters.values():
+                p.grad = torch.zeros_like(p)
+            model.clear_grad_for_y_q()  # type: ignore[operator]
+            self._y_q_parameter_names = names = [n for n, p in parameters.items() if p.grad is None]
+            for p in parameters.values():
+                p.grad = None
+        flat_parameters.clear_grads(names)
+
     def _require_grad(self, model: nn.Module, prefixes: Sequence[str], *, invert: bool):
         trainable_count = 0
         frozen_count = 0
@@ -682,7 +871,14 @@ class TrainVideoApp(BaseTrainVideoApp):
 
             model = model.module
 
-        self.model = DistributedDataParallel(model, find_unused_parameters=find_unused_parameters)
+        self.model = DistributedDataParallel(
+            model,
+            find_unused_parameters=find_unused_parameters,
+            # Lets param.grad alias the allreduce buckets so DDP skips copying gradients back after allreduce.
+            gradient_as_bucket_view=self.get_config_by_path(
+                "train.ddp_gradient_as_bucket_view", default=False, expected_type=bool
+            ),
+        )
 
     def _create_optic_flow_loss(self):
         optic_flow_loss = self._optic_flow_loss
@@ -724,9 +920,20 @@ class TrainVideoApp(BaseTrainVideoApp):
 
                 g[n] = v
 
+    def train_one_epoch(self, epoch):
+        with self.torch_compile.epoch_scope() as on_step:
+            self._on_train_step = on_step
+            try:
+                super().train_one_epoch(epoch)
+            finally:
+                self._on_train_step = None
+
     def train_step(self, epoch, step, batch):
         assert self.qp_num is not None
         assert self.training_lambdas is not None
+
+        if self._on_train_step is not None:
+            self._on_train_step(step)
 
         control_at_step = self.get_config_by_path("train.controller.at_step", default=False)
         if control_at_step:
@@ -906,9 +1113,7 @@ class TrainVideoApp(BaseTrainVideoApp):
             if self.use_drift_loss:
                 self._truncate_drift_bptt()
             if self.loss_func.bpp_weight == 0 and self.clear_grad_for_y_q:
-                model = self.get_unwrapped_model(self.model)
-                assert model is not None
-                model.clear_grad_for_y_q()  # type: ignore[operator]
+                self._clear_grad_for_y_q()
 
             self.optimizer_step()
 
@@ -949,13 +1154,33 @@ class TrainVideoApp(BaseTrainVideoApp):
             x = with_standard_strides(x)
             dpb["ref_frame"] = with_standard_strides(dpb.get("ref_frame"))
 
-        rd = model(x, dpb, q_index=frame_q_index, fa_idx=fa_idx, **kwargs)
-
         if self.distortion_weights is not None:
             weight_idx = min(frame_idx - self.p_frame_offset, len(self.distortion_weights) - 1)
             frame_lambdas = frame_lambdas * self.distortion_weights[weight_idx]
 
         loss_target = target_x if target_x is not None else x
+
+        if isinstance(model, FrameLossStep):
+            if self.torch_compile.enabled:
+                loss_target = with_standard_strides(loss_target)
+                frame_lambdas = with_standard_strides(frame_lambdas)
+                mask = with_standard_strides(mask)
+            loss, dpb, metric_names, metric_values = model(
+                x,
+                dpb,
+                q_index=frame_q_index,
+                fa_idx=fa_idx,
+                loss_func=self.loss_func,
+                target=loss_target,
+                lambdas=frame_lambdas,
+                mask=mask,
+                **kwargs,
+            )
+            # metrics are accumulated over frames, while the next CUDA graph replay may overwrite the output
+            return loss, dpb, metric_names, metric_values.clone()
+
+        rd = model(x, dpb, q_index=frame_q_index, fa_idx=fa_idx, **kwargs)
+
         ld = self.loss_func(rd, loss_target, lambdas=frame_lambdas, mask=mask)
         loss = ld.pop("loss")
 
@@ -967,16 +1192,9 @@ class TrainVideoApp(BaseTrainVideoApp):
                 self.drift_loss_weight * drift_pixel + self.drift_feature_loss_weight * drift_feature
             )
 
-        metrics = dict(loss=loss.detach())
-        metrics.update((n, v.detach()) for n, v in rd.items() if n.startswith("bpp_"))
-        metrics.update((n, v.detach()) for n, v in ld.items())
-        if drift_pixel is not None:
-            metrics["drift_pixel"] = drift_pixel.detach()
-        if drift_feature is not None:
-            metrics["drift_feature"] = drift_feature.detach()
-
-        metric_names = {n: i for i, n in enumerate(metrics.keys())}
-        metric_values = torch.stack(list(metrics.values()), dim=-1)
+        metric_names, metric_values = stack_frame_metrics(
+            loss, rd, ld, drift_pixel=drift_pixel, drift_feature=drift_feature
+        )
         return loss.mean(), rd["dpb"], metric_names, metric_values
 
     def _drift_step(self, model, rd, dpb, q_index, fa_idx):
@@ -1197,7 +1415,8 @@ class TrainVideoApp(BaseTrainVideoApp):
             if clip_loss is None:
                 clip_loss = loss
             else:
-                clip_loss += loss
+                # not in place: with a compiled loss, the first frame's loss is a CUDA graph output
+                clip_loss = clip_loss + loss
 
             if clip_metric_names is None:
                 clip_metric_names = metric_names
