@@ -1,29 +1,37 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-"""Apply BasicVSR++ denoising restoration to training data.
+"""Apply BasicVSR++ restoration to image-sequence or raw-YUV datasets.
 
-Reads image sequences (JPEG/PNG/WebP, description.json), restores through
-BasicVSR++ (denoising mode, is_low_res_input=False), and writes restored
-data to save_dir.
+Image-sequence mode reads JPEG/PNG/WebP training manifests. YUV-test mode reads
+benchmark test descriptions and writes aligned raw YUV420 targets. Both modes
+use BasicVSR++ with is_low_res_input=False and preserve the input resolution.
 
 Output is at the same resolution as input (no super-resolution).
 """
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import inspect
 import json
 import logging
 import os
 import time
+from pathlib import Path, PureWindowsPath
+from typing import Any
 
 import numpy as np
 import torch
 from PIL import Image
 
-from src.models.restoration.basicvsrpp_arch import load_basicvsrpp
+from src.models.restoration import basicvsrpp_arch
+from src.models.restoration.basicvsrpp_inference import BasicVSRPPInference
 from src.utils.app import BaseApp
 from src.utils.distributed.operations import run_distributed
+from src.utils.video_reader import YUVReader
+from src.utils.video_writer import YUVWriter
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +49,73 @@ _FORMAT_TO_EXT = {
     "png": ".png",
     "webp": ".webp",
 }
-_IMAGE_EXTS = tuple(_EXT_TO_FORMAT.keys())
+
+
+def sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        while chunk := file.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def resolve_description_path(root: Path, *parts: str) -> Path:
+    """Resolve description fields beneath an already-resolved dataset root."""
+    for part in parts:
+        # Recognize drive/UNC paths and both separator styles on either platform.
+        description_path = PureWindowsPath(part)
+        if description_path.anchor or ".." in description_path.parts:
+            raise ValueError(f"Description paths must be relative and cannot contain '..': {part!r}")
+    path = root.joinpath(*parts).resolve()
+    if root not in path.parents:
+        raise ValueError("Dataset paths must remain inside their respective roots")
+    return path
+
+
+def build_yuv_test_tasks(description: dict[str, Any]) -> list[dict[str, Any]]:
+    if not isinstance(description.get("test_classes"), dict):
+        raise ValueError("YUV test description is missing a 'test_classes' object")
+
+    tasks = []
+    for class_name, class_desc in description["test_classes"].items():
+        if not class_desc.get("test", True):
+            continue
+        if class_desc.get("src_type") != "yuv420":
+            raise ValueError(f"{class_name}: expected src_type yuv420, got {class_desc.get('src_type')}")
+        base_path = class_desc["base_path"]
+        for seq_name, seq_desc in class_desc["sequences"].items():
+            tasks.append(
+                {
+                    "class_name": class_name,
+                    "base_path": base_path,
+                    "seq_name": seq_name,
+                    "width": int(seq_desc["width"]),
+                    "height": int(seq_desc["height"]),
+                    "frames": int(seq_desc["frames"]),
+                    "frame_rate": float(seq_desc.get("frame_rate", 30)),
+                }
+            )
+
+    if not tasks:
+        raise ValueError("No YUV test sequences selected")
+    return tasks
+
+
+def make_target_description(
+    source_description: dict[str, Any],
+    provenance: dict[str, Any],
+) -> dict[str, Any]:
+    target_description = copy.deepcopy(source_description)
+    target_description.pop("root_path", None)
+    target_description["target_provenance"] = provenance
+    return target_description
 
 
 class RestoreVimeoBasicVSRPP(BaseApp):
     def __init__(self):
         super().__init__()
         self._device: torch.device | None = None
-        self._model: torch.nn.Module | None = None
+        self._processor: BasicVSRPPInference | None = None
         self._chunk_size = 32
         self._overlap = 0
         self._data_root: str | None = None
@@ -56,127 +123,51 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         self._out_format = "auto"
         self._quality = 100
         self._webp_lossless = False
+        self._source_config_path: str | None = None
+        self._source_description: dict[str, Any] | None = None
+        self._weights_path: str | None = None
+        self._checkpoint_sha256: str | None = None
 
     def initialize(self, local_rank: int):
         super().initialize(local_rank)
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logger.info("Device: %s (cuda=%s)", self._device, torch.cuda.is_available())
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._device = device
+        logger.info("Device: %s (cuda=%s)", device, torch.cuda.is_available())
 
         self._chunk_size = int(self.get_config_by_path("model.chunk_size", default=32))
         self._overlap = int(self.get_config_by_path("model.overlap", default=0))
         logger.info("chunk_size: %d, overlap: %d", self._chunk_size, self._overlap)
 
-        # Validate chunking config: the multi-chunk loop advances by
-        # (chunk_size - 2 * overlap), which must be positive or it never terminates.
-        if self._chunk_size <= 0:
-            raise ValueError(f"model.chunk_size must be > 0, got {self._chunk_size}")
-        if self._overlap < 0:
-            raise ValueError(f"model.overlap must be >= 0, got {self._overlap}")
-        if self._chunk_size - 2 * self._overlap <= 0:
-            raise ValueError(
-                "Invalid chunking configuration: model.chunk_size - 2 * model.overlap "
-                f"must be > 0, got chunk_size={self._chunk_size}, overlap={self._overlap}"
-            )
-
         weights_path = self.resolve_path(
             self.get_config_by_path("model.weights_path"),
             default_source="checkpoints_mount",
         )
+        self._weights_path = weights_path
         mid_channels = int(self.get_config_by_path("model.mid_channels", default=64))
         num_blocks = int(self.get_config_by_path("model.num_blocks", default=15))
 
         logger.info("Loading BasicVSR++ weights from %s", weights_path)
-        self._model = load_basicvsrpp(
+        self._processor = BasicVSRPPInference.from_checkpoint(
             weights_path,
-            map_location="cpu",
+            device,
             mid_channels=mid_channels,
             num_blocks=num_blocks,
-            is_low_res_input=False,
+            chunk_size=self._chunk_size,
+            overlap=self._overlap,
         )
-        self._model = self._model.to(self._device)
-        for p in self._model.parameters():
-            p.requires_grad_(False)
 
-        if self._device.type == "cuda":
+        if device.type == "cuda":
             alloc = torch.cuda.memory_allocated() / 1e6
             logger.info("VRAM after model load: %.1f MB", alloc)
-
-    @torch.inference_mode()
-    def _restore_chunk(
-        self,
-        rgb_frames: list[np.ndarray],
-    ) -> tuple[list[np.ndarray], float]:
-        """Restore a chunk of RGB frames.
-
-        Args:
-            rgb_frames: list of 3×H×W float32 arrays in [0,1].
-
-        Returns:
-            (restored_frames, elapsed_seconds)
-        """
-        assert self._device is not None and self._model is not None
-        x = torch.stack([torch.from_numpy(f) for f in rgb_frames], dim=0)
-        x = x.unsqueeze(0).to(self._device, non_blocking=True)
-
-        if self._device.type == "cuda":
-            torch.cuda.synchronize()
-        t0 = time.perf_counter()
-
-        y = self._model(x)
-
-        if self._device.type == "cuda":
-            torch.cuda.synchronize()
-        elapsed = time.perf_counter() - t0
-
-        y = y.clamp_(0.0, 1.0).squeeze(0).cpu().numpy().astype(np.float32)
-        return [y[i] for i in range(y.shape[0])], elapsed
+        if self.rank <= 0:
+            self._checkpoint_sha256 = sha256_file(weights_path)
 
     def _process_sequence(
         self,
         rgb_frames: list[np.ndarray],
     ) -> tuple[list[np.ndarray], list[float]]:
-        """Process a full sequence with overlapping chunks."""
-        n_frames = len(rgb_frames)
-        chunk_size = self._chunk_size
-        overlap = self._overlap
-        usable = chunk_size - 2 * overlap
-
-        if n_frames <= chunk_size:
-            restored, elapsed = self._restore_chunk(rgb_frames)
-            return restored, [elapsed]
-
-        restored_buf: list[np.ndarray | None] = [None] * n_frames
-        chunk_times: list[float] = []
-
-        i = 0
-        while i < n_frames:
-            chunk_start = max(0, i - overlap)
-            chunk_end = min(n_frames, i + usable + overlap)
-            chunk = rgb_frames[chunk_start:chunk_end]
-
-            out_frames, elapsed = self._restore_chunk(chunk)
-            chunk_times.append(elapsed)
-
-            halo_left = i - chunk_start
-            halo_right = chunk_end - min(i + usable, n_frames)
-            keep_start = halo_left
-            keep_end = len(out_frames) - halo_right if halo_right > 0 else len(out_frames)
-
-            for j in range(keep_start, keep_end):
-                frame_idx = i + (j - keep_start)
-                if frame_idx < n_frames:
-                    restored_buf[frame_idx] = out_frames[j]
-
-            i += usable
-
-        for idx in range(n_frames):
-            if restored_buf[idx] is None:
-                logger.warning("Frame %d was not restored; using original", idx)
-                restored_buf[idx] = rgb_frames[idx]
-
-        # Every slot is filled above, so the comprehension yields a list[np.ndarray].
-        restored = [f for f in restored_buf if f is not None]
-        return restored, chunk_times
+        assert self._processor is not None
+        return self._processor.restore_sequence(rgb_frames)
 
     def _read_frames(self, src_dir: str, frame_names: list[str]) -> list[np.ndarray]:
         """Read image frames as list of 3×H×W float32 [0,1]."""
@@ -219,26 +210,22 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         else:  # PNG (lossless)
             img.save(dst_path, "PNG")
 
-    def _process_task(self, task: dict) -> dict:
+    def _process_image_task(self, task: dict) -> dict:
         """Process one image sequence: read → restore → write."""
         assert self._device is not None
         assert self._data_root is not None and self._output_root is not None
         seq_id = task["path"]
         frame_names = task["frames"]
-        expected_count = len(frame_names)
-        src_dir = os.path.join(self._data_root, seq_id)
-        dst_dir = os.path.join(self._output_root, seq_id)
+        source_root = Path(self._data_root).resolve()
+        output_root = Path(self._output_root).resolve()
+        source_paths = [resolve_description_path(source_root, seq_id, name) for name in frame_names]
+        output_paths = [
+            resolve_description_path(output_root, seq_id, self._resolve_output_name(name)) for name in frame_names
+        ]
+        if set(source_paths) & set(output_paths):
+            raise ValueError("Image source and output paths must differ")
 
-        # Skip-existing
-        if os.path.isdir(dst_dir):
-            existing = [f for f in os.listdir(dst_dir) if f.lower().endswith(_IMAGE_EXTS)]
-            if len(existing) >= expected_count:
-                logger.info("Skipping %s — already has %d files", seq_id, len(existing))
-                return {"seq": seq_id, "skipped": True, "frames": expected_count}
-
-        os.makedirs(dst_dir, exist_ok=True)
-
-        orig_frames = self._read_frames(src_dir, frame_names)
+        orig_frames = self._read_frames(str(source_root), [str(path.relative_to(source_root)) for path in source_paths])
         logger.info("  %s: read %d frames", seq_id, len(orig_frames))
 
         if self._device.type == "cuda":
@@ -248,9 +235,9 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         restored_frames, chunk_times = self._process_sequence(orig_frames)
         wall = time.perf_counter() - t0
 
-        for fname, rf in zip(frame_names, restored_frames):
-            out_name = self._resolve_output_name(fname)
-            self._write_frame(os.path.join(dst_dir, out_name), rf)
+        for output_path, rf in zip(output_paths, restored_frames):
+            os.makedirs(output_path.parent, exist_ok=True)
+            self._write_frame(str(output_path), rf)
 
         total_model_s = sum(chunk_times)
         result = {
@@ -293,7 +280,7 @@ class RestoreVimeoBasicVSRPP(BaseApp):
 
         return tasks, description_path
 
-    def run(self):
+    def _run_image_sequences(self):
         tasks, description_path = self._load_tasks()
 
         self._out_format = str(self.get_config_by_path("output.format", default="auto")).lower()
@@ -332,7 +319,7 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         results = run_distributed(
             self.rank,
             tasks,
-            task_processor=self._process_task,
+            task_processor=self._process_image_task,
             progress_callback=lambda done, total, elapsed: logger.info(
                 "rank %d: %d/%d sequences (%.1fs elapsed)",
                 self.rank,
@@ -381,6 +368,177 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         # Barrier to prevent NCCL teardown deadlocks
         if self.rank >= 0:
             torch.distributed.barrier()
+
+    @staticmethod
+    def _expected_yuv420_size(width: int, height: int, frames: int) -> int:
+        return width * height * 3 // 2 * frames
+
+    def _load_yuv_tasks(self) -> list[dict[str, Any]]:
+        source_config = self.get_config_by_path("dataset.config")
+        self._source_config_path = self.resolve_path(source_config, default_source="data_mount")
+        self._data_root = self.resolve_path(self.get_config_by_path("dataset.data_path"))
+        with open(self._source_config_path, "rt", encoding="utf-8") as file:
+            description = json.load(file)
+        self._source_description = description
+        return build_yuv_test_tasks(description)
+
+    def _read_yuv_frames(self, path: str, width: int, height: int, count: int) -> list[np.ndarray]:
+        reader = YUVReader(path, width, height)
+        frames = []
+        try:
+            for frame_index in range(count):
+                frame = reader.read_one_frame(dst_format="rgb")
+                if frame is None:
+                    raise ValueError(f"{path}: ended before frame {frame_index} of {count}")
+                frames.append(frame)
+        finally:
+            reader.close()
+        return frames
+
+    def _process_yuv_task(self, task: dict[str, Any]) -> dict[str, Any]:
+        assert self._processor is not None
+        assert self._data_root is not None and self._output_root is not None
+
+        parts = (task["base_path"], task["seq_name"])
+        source_root = Path(self._data_root).resolve()
+        output_root = Path(self._output_root).resolve()
+        source = resolve_description_path(source_root, *parts)
+        output = resolve_description_path(output_root, *parts)
+        if source == output:
+            raise ValueError("YUV source and output paths must differ")
+        source_path, output_path = str(source), str(output)
+        expected_size = self._expected_yuv420_size(task["width"], task["height"], task["frames"])
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        partial_path = output_path + ".partial"
+        if os.path.exists(partial_path):
+            os.remove(partial_path)
+
+        frames = self._read_yuv_frames(source_path, task["width"], task["height"], task["frames"])
+        if self._device is not None and self._device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+        start = time.perf_counter()
+        restored_frames, chunk_times = self._process_sequence(frames)
+        elapsed = time.perf_counter() - start
+        if len(restored_frames) != task["frames"]:
+            raise RuntimeError(
+                f"{task['class_name']}/{task['seq_name']}: restored {len(restored_frames)} "
+                f"frames, expected {task['frames']}"
+            )
+
+        try:
+            with YUVWriter(partial_path, task["width"], task["height"]) as writer:
+                for frame in restored_frames:
+                    writer.write_one_frame(rgb=frame, src_format="rgb")
+            actual_size = os.path.getsize(partial_path)
+            if actual_size != expected_size:
+                raise RuntimeError(
+                    f"{task['class_name']}/{task['seq_name']}: output size {actual_size}, expected {expected_size}"
+                )
+            os.replace(partial_path, output_path)
+        finally:
+            if os.path.exists(partial_path):
+                os.remove(partial_path)
+
+        model_seconds = sum(chunk_times)
+        result = {
+            **task,
+            "skipped": False,
+            "chunks": len(chunk_times),
+            "model_seconds": model_seconds,
+            "wall_seconds": elapsed,
+            "model_fps": task["frames"] / model_seconds if model_seconds > 0 else None,
+            "output_bytes": expected_size,
+            "output_sha256": sha256_file(output_path),
+        }
+        if self._device is not None and self._device.type == "cuda":
+            result["peak_vram_mb"] = torch.cuda.max_memory_allocated() / 1e6
+        return result
+
+    @staticmethod
+    def _source_hashes() -> dict[str, str]:
+        paths = [
+            __file__,
+            inspect.getsourcefile(BasicVSRPPInference),
+            inspect.getsourcefile(basicvsrpp_arch.BasicVSRPlusPlusNet),
+        ]
+        return {os.path.basename(path): sha256_file(path) for path in paths if path is not None}
+
+    def _run_yuv_testset(self):
+        tasks = self._load_yuv_tasks()
+        assert self._source_config_path is not None
+        assert self._source_description is not None
+        assert self._weights_path is not None
+
+        self._output_root = os.path.join(self.save_dir, "restored")
+        os.makedirs(self._output_root, exist_ok=True)
+        logger.info("Processing %d YUV test sequences into %s", len(tasks), self._output_root)
+
+        if self._checkpoint_sha256 is None:
+            self._checkpoint_sha256 = sha256_file(self._weights_path)
+        provenance = {
+            "model": "BasicVSR++",
+            "checkpoint": os.path.basename(self._weights_path),
+            "checkpoint_sha256": self._checkpoint_sha256,
+            "source_config": os.path.basename(self._source_config_path),
+            "source_config_sha256": sha256_file(self._source_config_path),
+            "chunk_size": self._chunk_size,
+            "overlap": self._overlap,
+            "source_hashes": self._source_hashes(),
+        }
+        manifest_path = os.path.join(self.save_dir, "restoration_manifest.json")
+
+        start = time.perf_counter()
+        results = run_distributed(
+            self.rank,
+            tasks,
+            task_processor=self._process_yuv_task,
+            progress_callback=lambda done, total, elapsed: logger.info(
+                "rank %d: %d/%d sequences (%.1fs elapsed)",
+                self.rank,
+                done,
+                total,
+                elapsed,
+            ),
+            progress_interval=10,
+            weight_func=lambda task: task["width"] * task["height"] * task["frames"],
+        )
+        elapsed = time.perf_counter() - start
+
+        if self.rank <= 0:
+            target_description = make_target_description(self._source_description, provenance)
+            target_config_path = os.path.join(self._output_root, os.path.basename(self._source_config_path))
+            with open(target_config_path, "wt", encoding="utf-8") as file:
+                json.dump(target_description, file, indent=2)
+
+            if any(result is None for result in results):
+                raise RuntimeError("At least one YUV restoration task did not return a result")
+            sequence_results = {
+                f"{result['class_name']}/{result['seq_name']}": result for result in results if result is not None
+            }
+            summary = {
+                "model": provenance,
+                "source_config": self._source_config_path,
+                "target_config": target_config_path,
+                "total_sequences": len(tasks),
+                "completed": len(sequence_results),
+                "wall_seconds": elapsed,
+                "sequences": sequence_results,
+            }
+            with open(manifest_path, "wt", encoding="utf-8") as file:
+                json.dump(summary, file, indent=2)
+
+        if self.rank >= 0:
+            torch.distributed.barrier()
+
+    def run(self):
+        description_path = self.get_config_by_path("dataset.description_path", default=None)
+        test_config = self.get_config_by_path("dataset.config", default=None)
+        if bool(description_path) == bool(test_config):
+            raise ValueError("Specify exactly one of dataset.description_path or dataset.config")
+        if description_path:
+            self._run_image_sequences()
+        else:
+            self._run_yuv_testset()
 
 
 if __name__ == "__main__":

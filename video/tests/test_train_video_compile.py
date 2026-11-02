@@ -11,7 +11,7 @@ import torch
 from src.models.common_model import CompressionModel
 from src.models.utils import CkptModule
 from src.utils.ane_mode import ane_simulation
-from train_video import TrainVideoApp
+from train_video import FrameLossStep, TrainVideoApp
 
 
 class TrainableModule(CkptModule):
@@ -77,7 +77,8 @@ class FrameLoss:
     bpp_weight = 1.0
 
     def __call__(self, rd, target, lambdas, mask):
-        return {"loss": lambdas * (rd["x_hat"] - target).pow(2).flatten(1).mean(dim=1)}
+        mse = (rd["x_hat"] - target).pow(2).flatten(1).mean(dim=1)
+        return {"loss": lambdas * mse, "mse": mse}
 
 
 def _make_train_app(model, train_config, *, compile_model, cascade_frame_ranges):
@@ -139,7 +140,7 @@ def reset_compiler():
 @pytest.fixture
 def app():
     app = TrainVideoApp()
-    app._config = {"train": {"cascade": False}}
+    app._config = {"train": {"cascade": False, "compile_loss": False}}
     app._device = torch.device("cuda")
     return app
 
@@ -190,6 +191,20 @@ def test_scheduled_compile_policy_preserves_module_identity(app, compile_calls, 
         assert model.forward == forward
         assert model.weight is weight
         assert tuple(model.state_dict()) == keys
+
+
+@pytest.mark.parametrize(
+    "key", ["compile_fast_cudagraph_recording", "flat_parameters", "compile_loss", "ddp_gradient_as_bucket_view"]
+)
+def test_scheduled_startup_only_options_fail_before_training(app, tmp_path, monkeypatch, key):
+    app.config["save_dir"] = str(tmp_path)
+    app.config["benchmark_test"] = {}
+    app.config["train"][key] = False
+    app.config["train"]["schedule"] = [{"epoch": 5, key: True}]
+    monkeypatch.setattr(app, "restore_train_state", lambda: pytest.fail("training started"))
+
+    with pytest.raises(ValueError, match=f"{key} is immutable"):
+        app.train()
 
 
 @pytest.mark.parametrize("has_model", [True, False])
@@ -342,3 +357,217 @@ def test_cached_masks_survive_compiled_replay_with_assume_constant_result(backen
     assert_compiled_training_matches_eager(
         MaskedModule(layout), {"compile_backend": backend}, cascade_frame_ranges, sizes=sizes
     )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="compiled backends require CUDA")
+@pytest.mark.parametrize("backend", [None, "cudagraphs", "inductor"])
+@pytest.mark.parametrize("cascade_frame_ranges", CASCADE_FRAME_RANGES)
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"flat_parameters": True, "compile_loss": True},
+        {"flat_parameters": True, "compile_loss": True, "compile_skip_guard_eval_after_steps": 1},
+    ],
+    ids=["flat_parameters_compile_loss", "skip_guard_eval"],
+)
+def test_training_options_train_like_per_parameter_eager(backend, cascade_frame_ranges, options):
+    """Flat parameters, a compiled loss and skipped guards give the same steps and checkpoints as eager training."""
+    torch.manual_seed(0)
+    model = RecurrentFrameModule(TrainableModule()).cuda()
+    reference = copy.deepcopy(model)
+    apps = []
+    for m, train_config in (
+        (reference, {"compile_model": False}),
+        (model, {"compile_model": backend is not None, "compile_backend": backend or "inductor", **options}),
+    ):
+        app = TrainVideoApp()
+        app._config = {
+            "train": {
+                **train_config,
+                "cascade": cascade_frame_ranges is not None,
+                "grad_max_norm": 1.0,
+                "learning_rate": 0.01,
+            }
+        }
+        app._device = torch.device("cuda")
+        app.use_drift_loss = False
+        app.frame_index_map = (0,)
+        app.cascade_frame_ranges = cascade_frame_ranges
+        app.loss_func = FrameLoss()  # pyright: ignore[reportAttributeAccessIssue]
+        app.model = app.make_train_model(m)
+        app.optimizer = app.create_optimizer()
+        apps.append(app)
+    assert apps[1].flat_parameters is not None
+    assert isinstance(apps[1]._compiled_model, FrameLossStep)
+
+    # shapes change only during the guard evaluation warmup
+    sizes = ((8, 8), (8, 8), (8, 8)) if "compile_skip_guard_eval_after_steps" in options else ((8, 8), (12, 8), (8, 8))
+    with apps[1].torch_compile.epoch_scope() as on_step:
+        for i, (height, width) in enumerate(sizes):
+            on_step(i)
+            videos = torch.rand(2, N_FRAMES, 4, height, width, device="cuda")
+            q_index = torch.zeros(2, N_FRAMES, dtype=torch.long, device="cuda")
+            lambdas = torch.ones(2, N_FRAMES, device="cuda")
+            results = []
+            for app in apps:
+                step = app._step_by_frame if cascade_frame_ranges is None else app._step_by_clip
+                dpb = {"ref_frame": videos[:, 0], "ref_feature": None}
+                results.append(step(videos, dpb=dpb, q_index=q_index, lambdas=lambdas))
+
+            (expected_names, expected_values), (names, values) = results
+            assert names == expected_names
+            torch.testing.assert_close(values, expected_values)
+            for (name, param), expected_param in zip(model.named_parameters(), reference.parameters()):
+                torch.testing.assert_close(param, expected_param, msg=lambda m: f"{name}: {m}")
+
+    expected_state, state = (app.get_train_state(0)["optimizer"] for app in apps)
+    assert state["param_groups"] == expected_state["param_groups"]
+    torch.testing.assert_close(state["state"], expected_state["state"])
+
+
+class QScaledFrameModule(RecurrentFrameModule):
+    """Adds a parameter whose gradient the model clears without a rate loss, like DMC's q_encoder etc."""
+
+    def __init__(self, frame_block):
+        super().__init__(frame_block)
+        self.q_scale = torch.nn.Parameter(torch.tensor(1.5))
+
+    def forward(self, x, dpb, *, q_index, fa_idx):
+        rd = super().forward(x, dpb, q_index=q_index, fa_idx=fa_idx)
+        rd["x_hat"] = rd["x_hat"] * self.q_scale
+        return rd
+
+    def clear_grad_for_y_q(self):
+        self.q_scale.grad = None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="compiled backends require CUDA")
+@pytest.mark.parametrize("backend", [None, "cudagraphs", "inductor"])
+def test_flat_parameters_clear_grad_for_y_q_like_per_parameter_eager(backend):
+    torch.manual_seed(0)
+    model = QScaledFrameModule(TrainableModule()).cuda()
+    reference = copy.deepcopy(model)
+    apps = []
+    for m, train_config in (
+        (reference, {"compile_model": False}),
+        (
+            model,
+            {"compile_model": backend is not None, "compile_backend": backend or "inductor", "flat_parameters": True},
+        ),
+    ):
+        app = TrainVideoApp()
+        app._config = {"train": {**train_config, "cascade": False, "grad_max_norm": 1.0, "learning_rate": 0.01}}
+        app._device = torch.device("cuda")
+        app.use_drift_loss = False
+        app.frame_index_map = (0,)
+        loss_func = FrameLoss()
+        loss_func.bpp_weight = 0.0
+        app.loss_func = loss_func  # pyright: ignore[reportAttributeAccessIssue]
+        app.clear_grad_for_y_q = True
+        app.model = app.make_train_model(m)
+        app.optimizer = app.create_optimizer()
+        apps.append(app)
+
+    for _ in range(2):
+        videos = torch.rand(2, N_FRAMES, 4, 8, 8, device="cuda")
+        q_index = torch.zeros(2, N_FRAMES, dtype=torch.long, device="cuda")
+        lambdas = torch.ones(2, N_FRAMES, device="cuda")
+        for app in apps:
+            dpb = {"ref_frame": videos[:, 0], "ref_feature": None}
+            app._step_by_frame(videos, dpb=dpb, q_index=q_index, lambdas=lambdas)
+
+    assert model.q_scale.item() == 1.5
+    for (name, param), expected_param in zip(model.named_parameters(), reference.parameters()):
+        torch.testing.assert_close(param, expected_param, msg=lambda m: f"{name}: {m}")
+
+
+def test_flat_parameters_reject_eager_training():
+    app = TrainVideoApp()
+    app._config = {"train": {"flat_parameters": True, "compile_model": False}}
+    app.model = torch.nn.Linear(2, 2)
+    app.grad_norm_tracker = None
+    with pytest.raises(ValueError, match="does not support train.compile_model: false$"):
+        app._check_flat_parameters_support({"transfer_weights": "none"})
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused optimizers require CUDA")
+@pytest.mark.parametrize("flat_parameters", [False, True])
+def test_fused_optimizer_resumes_from_non_fused_state(flat_parameters):
+    torch.manual_seed(0)
+    model = torch.nn.Linear(3, 2).cuda()
+    saved = torch.optim.AdamW(model.parameters(), lr=0.1)
+    for p in model.parameters():
+        p.grad = torch.ones_like(p)
+    saved.step()
+
+    app = TrainVideoApp()
+    app._config = {
+        "train": {
+            "flat_parameters": flat_parameters,
+            "compile_model": False,
+            "grad_max_norm": 1.0,
+            "learning_rate": 0.1,
+            "optimizer": {"params": {"fused": True}},
+        }
+    }
+    app._device = torch.device("cuda")
+    app.model = app.make_train_model(model)
+    optimizer = app.optimizer = app.load_optimizer({"optimizer": saved.state_dict()})
+    assert all(group["fused"] for group in optimizer.param_groups)
+
+    for p in app.get_trainable_parameters():
+        p.grad = torch.ones_like(p)
+    app.optimizer_step()
+    assert all(s["step"].device.type == "cuda" and s["step"].item() == 2 for s in optimizer.state.values())
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="compiled backends require CUDA")
+@pytest.mark.parametrize("backend", [None, "cudagraphs", "inductor"])
+def test_drift_loss_continues_without_flat_parameters_and_compiled_loss(backend):
+    """When a schedule enables a drift loss, training continues on the plain model with the same optimizer state."""
+    optimize_ddp = torch._dynamo.config.optimize_ddp
+    torch.manual_seed(0)
+    model = RecurrentFrameModule(TrainableModule()).cuda()
+    reference = copy.deepcopy(model)
+    apps = []
+    for m, train_config in (
+        (reference, {"compile_model": False}),
+        (
+            model,
+            {
+                "compile_model": backend is not None,
+                "compile_backend": backend or "inductor",
+                "flat_parameters": True,
+                "compile_loss": True,
+            },
+        ),
+    ):
+        app = TrainVideoApp()
+        app._config = {"train": {**train_config, "cascade": False, "grad_max_norm": 1.0, "learning_rate": 0.01}}
+        app._device = torch.device("cuda")
+        app.use_drift_loss = False
+        app.frame_index_map = (0,)
+        app.loss_func = FrameLoss()  # pyright: ignore[reportAttributeAccessIssue]
+        app.model = app.make_train_model(m)
+        app.optimizer = app.create_optimizer()
+        apps.append(app)
+
+    def train_step():
+        videos = torch.rand(2, N_FRAMES, 4, 8, 8, device="cuda")
+        q_index = torch.zeros(2, N_FRAMES, dtype=torch.long, device="cuda")
+        lambdas = torch.ones(2, N_FRAMES, device="cuda")
+        for app in apps:
+            dpb = {"ref_frame": videos[:, 0], "ref_feature": None}
+            app._step_by_frame(videos, dpb=dpb, q_index=q_index, lambdas=lambdas)
+
+    train_step()
+    apps[1]._remove_model_wrappers("drift losses")
+    assert apps[1].flat_parameters is None and apps[1]._compiled_model is model
+    assert all(p.requires_grad for p in model.parameters())
+    assert torch._dynamo.config.optimize_ddp == optimize_ddp
+    train_step()
+
+    for (name, param), expected_param in zip(model.named_parameters(), reference.parameters()):
+        torch.testing.assert_close(param, expected_param, msg=lambda m: f"{name}: {m}")
+    expected_state, state = (app.get_train_state(0)["optimizer"] for app in apps)
+    torch.testing.assert_close(state["state"], expected_state["state"])

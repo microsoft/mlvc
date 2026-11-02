@@ -12,7 +12,7 @@ The supported cases are:
 | Configuration | Behavior |
 | --- | --- |
 | `compile_model` omitted or `compile_model: true` | Enables compilation. This is the default. |
-| `compile_model: false` | Disables compilation. Use this for debugging, CPU runs, or simulated ANE. |
+| `compile_model: false` | Disables compilation. Use this for debugging, CPU runs, or simulated ANE; also set `flat_parameters: false`, since flat parameters require compilation. |
 | Compilation enabled, `compile_backend` omitted | Uses the `inductor` backend. This is the default backend. |
 | `compile_backend: <backend>` | Uses the specified `torch.compile` backend, such as `cudagraphs`. |
 | `inductor` with `compile_mode` and `compile_options` omitted | Uses `reduce-overhead` mode (CUDA graphs) |

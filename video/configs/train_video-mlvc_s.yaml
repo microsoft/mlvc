@@ -62,6 +62,11 @@ model:
 train:
   # turn off model compilation, useful for debugging or when using simulated ANE
   #compile_model: false
+  #compile_loss: false
+  # store the parameters of each top-level module in one flat tensor: much less per-parameter work per step
+  flat_parameters: true
+  # skip most torch.compile guard checks from this step of each epoch; all input shapes and flags must occur before it
+  #compile_skip_guard_eval_after_steps: 100
 
   # enable gradient checkpointing to reduce memory usage
   use_backprop_checkpoints: false

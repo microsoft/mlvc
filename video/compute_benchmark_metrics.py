@@ -161,6 +161,18 @@ class ComputeBenchmarkMetricApp(BaseApp):
 
     def _run_encoder_test(self, testset_name: str, *, config: Dict[str, Any], params: EncoderTestParams, model):
         testset_desc_filename = self.resolve_path(config["config"], default_source=".")
+        target_config = config.get("target")
+        if target_config is not None:
+            if not isinstance(target_config, dict):
+                raise ValueError(f"{testset_name}: target must be a YAML object")
+            missing = [name for name in ("config", "data_path") if not target_config.get(name)]
+            if missing:
+                raise ValueError(f"{testset_name}: target is missing required fields: {', '.join(missing)}")
+            target_desc_filename = self.resolve_path(target_config["config"], default_source=".")
+            target_root = self.resolve_path(target_config["data_path"])
+        else:
+            target_desc_filename = None
+            target_root = None
 
         output_json_path = f"metrics_{testset_name}.json"
         output_json_path = os.path.join(self.save_dir, output_json_path)
@@ -171,6 +183,8 @@ class ComputeBenchmarkMetricApp(BaseApp):
             testset_name=testset_name,
             testset_desc_filename=testset_desc_filename,
             testset_root=self.resolve_path(config.get("data_path")),
+            target_desc_filename=target_desc_filename,
+            target_root=target_root,
             i_frame_model=model,
             p_frame_model=model,
             auxiliary_models=self.auxiliary_models,
