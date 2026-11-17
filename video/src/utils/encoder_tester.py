@@ -9,8 +9,9 @@ import json
 import logging
 import numbers
 import os
+import shlex
 import time
-from typing import Any, Optional, Sequence, Callable, List, Union, Dict
+from typing import Any, Optional, Sequence, Callable, List, Union, Dict, TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -28,6 +29,9 @@ from ..metrics.msssim import MS_SSIM
 from ..metrics.vif import VIF
 from ..models.segment import FaRLModel
 from ..transforms.functional import yuv_444_to_420, ycbcr2rgb, rgb2ycbcr, yuv_420_to_444
+
+if TYPE_CHECKING:
+    from ..metrics.simple_vqa.scorer import SimpleVQAStream
 
 __all__ = [
     "EncoderTestParams",
@@ -61,6 +65,7 @@ class EncoderTestParams:
     calc_lpips: bool = False
     calc_lrwer_rgb: bool = False
     calc_deqa_score_rgb: bool = False
+    calc_simple_vqa: bool = False
     calc_hrd_metrics: bool = False
     calc_psnr_roi: bool = False
     calc_psnr: bool = True
@@ -262,6 +267,29 @@ class EncoderTestTaskProcessor:
         assert model is not None
         self.device = next(iter(model.parameters())).device
 
+        self._simple_vqa = None
+        if task.params.calc_simple_vqa:
+            if auxiliary_models is None:
+                raise ValueError("SimpleVQA requires auxiliary model configuration")
+            self._simple_vqa = auxiliary_models.simple_vqa_model
+        self._simple_vqa_streams: List[Optional["SimpleVQAStream"]] = []
+        self._simple_vqa_errors: List[Optional[str]] = []
+        self._simple_vqa_frame_rate = task.frame_rate
+        if (
+            self._simple_vqa is not None
+            and getattr(model, "frame_count", None) is not None
+            and task.params.frame_step == 1
+        ):
+            source_frame_rate = getattr(model, "frame_rate", None)
+            if source_frame_rate is not None:
+                self._simple_vqa_frame_rate = source_frame_rate
+            else:
+                logging.warning(
+                    "SimpleVQA for %s has no valid container FPS; using task FPS %.3g",
+                    task.seq_name,
+                    task.frame_rate,
+                )
+
         if read_one_frame is None:
             read_one_frame = create_frame_reader(task)
 
@@ -302,8 +330,6 @@ class EncoderTestTaskProcessor:
             if task.decoder_format == "mp4":
                 compression_options = task.params.decoder_compression_options
                 if compression_options:
-                    import shlex
-
                     compression_options = shlex.split(compression_options, comments=False, posix=True)
                 else:
                     compression_options = None
@@ -312,7 +338,7 @@ class EncoderTestTaskProcessor:
                     task_qp.decoded_path,
                     width=task.src_width,
                     height=task.src_height,
-                    fps=task.frame_rate,
+                    fps=task.frame_rate / task.params.frame_step,
                     ffmpeg_options=compression_options,
                 )
             else:
@@ -422,15 +448,62 @@ class EncoderTestTaskProcessor:
     def run(self):
         task = self.task
         params = task.params
-
         n_frames = task.n_frames
         frame_step = params.frame_step
         if frame_step > 1:
             n_frames = (n_frames + frame_step - 1) // frame_step
 
+        if self._simple_vqa is not None:
+            self._simple_vqa_streams = [None] * len(task.q_points)
+            self._simple_vqa_errors = [None] * len(task.q_points)
+            for index in range(len(task.q_points)):
+                try:
+                    self._simple_vqa_streams[index] = self._simple_vqa.start_video(
+                        total_frames=n_frames, frame_rate=self._simple_vqa_frame_rate / frame_step
+                    )
+                except Exception as error:
+                    self._record_simple_vqa_error(index, error)
         dpb = None
         for frame_idx in range(n_frames):
             dpb = self._process_frame(frame_idx, dpb)
+
+        simple_vqa_results = []
+        if self._simple_vqa is not None:
+            if frame_step > 1:
+                logging.warning(
+                    "SimpleVQA for %s uses frame_step=%s: motion features see %.3g FPS instead of %.3g FPS; "
+                    "scores are not directly comparable with full-frame-rate scores",
+                    task.seq_name,
+                    frame_step,
+                    self._simple_vqa_frame_rate / frame_step,
+                    self._simple_vqa_frame_rate,
+                )
+            deterministic = torch.are_deterministic_algorithms_enabled()
+            warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+            try:
+                torch.use_deterministic_algorithms(False)
+                for index, task_qp in enumerate(task.q_points):
+                    try:
+                        stream = self._simple_vqa_streams[index]
+                        if stream is not None:
+                            score = stream.finish()
+                            simple_vqa_results.append({"ave_all_frame_simple_vqa": score})
+                        else:
+                            simple_vqa_results.append(
+                                {
+                                    "ave_all_frame_simple_vqa": None,
+                                    "ave_all_frame_simple_vqa_error": self._simple_vqa_errors[index],
+                                }
+                            )
+                    except Exception as error:
+                        self._record_simple_vqa_error(index, error)
+                        simple_vqa_results.append(
+                            {"ave_all_frame_simple_vqa": None, "ave_all_frame_simple_vqa_error": str(error)}
+                        )
+            finally:
+                torch.use_deterministic_algorithms(deterministic, warn_only=warn_only)
+                self._simple_vqa_streams.clear()
+                self._simple_vqa_errors.clear()
 
         if task.params.calc_lrwer_rgb:
             # Temporarily disable deterministic algorithm
@@ -499,6 +572,8 @@ class EncoderTestTaskProcessor:
 
         test_time = time.time() - self.start_time
         results_dict = [self._generate_result(test_time, idx) for idx in range(len(self.task.q_points))]
+        for result, simple_vqa in zip(results_dict, simple_vqa_results):
+            result.update(simple_vqa)
         if task.params.calc_lrwer_rgb:
             for idx, result in enumerate(results_dict):
                 result["ave_lrwer_rgb"] = lrwer_rgb[idx]
@@ -523,27 +598,41 @@ class EncoderTestTaskProcessor:
 
     def close(self, *, suppress_exceptions=False):
         try:
-            writer_list = self.rec_frame_writer_list
-            if writer_list is not None:
-                for writer in writer_list:
-                    if writer is None:
-                        continue
-                    if not suppress_exceptions:
-                        writer.close()
-                    else:
-                        # noinspection PyBroadException
-                        try:
-                            writer.close()
-                        except:  # noqa: E722
-                            logging.error("Exception while closing decoded clip wtiter", exc_info=True)
-
-                self.rec_frame_writer_list = None
+            self._close_rec_frame_writers(suppress_exceptions=suppress_exceptions)
 
             # done, no need to call self again
             suppress_exceptions = True
         finally:
+            self._simple_vqa_streams.clear()
+            self._simple_vqa_errors.clear()
             if not suppress_exceptions:
                 self.close(suppress_exceptions=True)
+
+    def _close_rec_frame_writers(self, *, suppress_exceptions=False):
+        if self.rec_frame_writer_list is None:
+            return
+        for writer in self.rec_frame_writer_list:
+            if writer is None:
+                continue
+            if not suppress_exceptions:
+                writer.close()
+            else:
+                try:
+                    writer.close()
+                except Exception:
+                    logging.error("Exception while closing decoded clip writer", exc_info=True)
+        self.rec_frame_writer_list = None
+
+    def _record_simple_vqa_error(self, index: int, error: Exception):
+        logging.error(
+            "Error calculating SimpleVQA for %s qp %s: %s",
+            self.task.seq_name,
+            self.task.q_points[index].qp_desc,
+            error,
+            exc_info=True,
+        )
+        self._simple_vqa_errors[index] = str(error)
+        self._simple_vqa_streams[index] = None
 
     def _to_tensor(self, x):
         return torch.from_numpy(x).float().to(self.device, non_blocking=True).unsqueeze(0)
@@ -1108,6 +1197,7 @@ class EncoderTestTaskProcessor:
             or params.calc_lpips
             or params.calc_lrwer_rgb
             or params.calc_deqa_score_rgb
+            or self._simple_vqa is not None
         )
 
         if params.is_yuv420:
@@ -1238,6 +1328,23 @@ class EncoderTestTaskProcessor:
                 for idx, writer in enumerate(self.rec_frame_writer_list):
                     assert writer is not None
                     writer.write_one_frame(rgb=x_hat[idx].cpu().numpy(), src_format="rgb")
+
+        if self._simple_vqa is not None:
+            deterministic = torch.are_deterministic_algorithms_enabled()
+            warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+            try:
+                torch.use_deterministic_algorithms(False)
+                for index, stream in enumerate(self._simple_vqa_streams):
+                    if stream is None:
+                        continue
+                    try:
+                        assert rgb_rec is not None
+                        frame = rgb_rec[index].permute(1, 2, 0).cpu().numpy()
+                        stream.add_frame((frame * 255).astype(np.uint8))
+                    except Exception as error:
+                        self._record_simple_vqa_error(index, error)
+            finally:
+                torch.use_deterministic_algorithms(deterministic, warn_only=warn_only)
 
         return extra_stats
 

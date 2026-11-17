@@ -5,9 +5,9 @@
 
 Image-sequence mode reads JPEG/PNG/WebP training manifests. YUV-test mode reads
 benchmark test descriptions and writes aligned raw YUV420 targets. Both modes
-use BasicVSR++ with is_low_res_input=False and preserve the input resolution.
+use BasicVSR++ with is_low_res_input=False and optional pre-inference downsampling.
 
-Output is at the same resolution as input (no super-resolution).
+Output matches the model input resolution after any downsampling (no super-resolution).
 """
 
 from __future__ import annotations
@@ -123,6 +123,7 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         self._out_format = "auto"
         self._quality = 100
         self._webp_lossless = False
+        self._downsample_short_side = 0
         self._source_config_path: str | None = None
         self._source_description: dict[str, Any] | None = None
         self._weights_path: str | None = None
@@ -173,10 +174,34 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         """Read image frames as list of 3×H×W float32 [0,1]."""
         frames = []
         for fname in frame_names:
-            img = Image.open(os.path.join(src_dir, fname)).convert("RGB")
-            arr = np.array(img).astype(np.float32) / 255.0
+            with Image.open(os.path.join(src_dir, fname)) as source:
+                img = source.convert("RGB")
+                if self._downsample_short_side:
+                    img = self._resize_short_side(img, self._downsample_short_side)
+                arr = np.array(img).astype(np.float32) / 255.0
             frames.append(arr.transpose(2, 0, 1))  # CHW
         return frames
+
+    @staticmethod
+    def _downsample_size(width: int, height: int, short_side: int) -> tuple[int, int]:
+        if short_side == 0 or min(width, height) <= short_side:
+            return width, height
+        scale = short_side / min(width, height)
+        if width <= height:
+            return short_side, max(2, 2 * round(height * scale / 2))
+        return max(2, 2 * round(width * scale / 2)), short_side
+
+    @classmethod
+    def _resize_short_side(cls, image: Image.Image, short_side: int) -> Image.Image:
+        size = cls._downsample_size(*image.size, short_side)
+        if size == image.size:
+            return image
+        return image.resize(size, Image.Resampling.BOX)
+
+    @staticmethod
+    def _resize_float_rgb(frame: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+        # Float32 channels use Pillow's F mode, retaining precision with the same BOX filter.
+        return np.stack([np.asarray(Image.fromarray(channel).resize(size, Image.Resampling.BOX)) for channel in frame])
 
     def _resolve_output_name(self, src_fname: str) -> str:
         """Map an input frame filename to its output filename.
@@ -310,6 +335,7 @@ class RestoreVimeoBasicVSRPP(BaseApp):
                         "total_sequences": len(tasks),
                         "device": str(self._device),
                         "data_root": self._data_root,
+                        "downsample_short_side": self._downsample_short_side,
                     },
                     f,
                     indent=2,
@@ -383,6 +409,7 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         return build_yuv_test_tasks(description)
 
     def _read_yuv_frames(self, path: str, width: int, height: int, count: int) -> list[np.ndarray]:
+        output_size = self._downsample_size(width, height, self._downsample_short_side)
         reader = YUVReader(path, width, height)
         frames = []
         try:
@@ -390,6 +417,9 @@ class RestoreVimeoBasicVSRPP(BaseApp):
                 frame = reader.read_one_frame(dst_format="rgb")
                 if frame is None:
                     raise ValueError(f"{path}: ended before frame {frame_index} of {count}")
+                assert isinstance(frame, np.ndarray)
+                if output_size != (width, height):
+                    frame = self._resize_float_rgb(frame, output_size)
                 frames.append(frame)
         finally:
             reader.close()
@@ -407,7 +437,8 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         if source == output:
             raise ValueError("YUV source and output paths must differ")
         source_path, output_path = str(source), str(output)
-        expected_size = self._expected_yuv420_size(task["width"], task["height"], task["frames"])
+        width, height = self._downsample_size(task["width"], task["height"], self._downsample_short_side)
+        expected_size = self._expected_yuv420_size(width, height, task["frames"])
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         partial_path = output_path + ".partial"
         if os.path.exists(partial_path):
@@ -426,7 +457,7 @@ class RestoreVimeoBasicVSRPP(BaseApp):
             )
 
         try:
-            with YUVWriter(partial_path, task["width"], task["height"]) as writer:
+            with YUVWriter(partial_path, width, height) as writer:
                 for frame in restored_frames:
                     writer.write_one_frame(rgb=frame, src_format="rgb")
             actual_size = os.path.getsize(partial_path)
@@ -442,6 +473,8 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         model_seconds = sum(chunk_times)
         result = {
             **task,
+            "width": width,
+            "height": height,
             "skipped": False,
             "chunks": len(chunk_times),
             "model_seconds": model_seconds,
@@ -483,6 +516,8 @@ class RestoreVimeoBasicVSRPP(BaseApp):
             "source_config_sha256": sha256_file(self._source_config_path),
             "chunk_size": self._chunk_size,
             "overlap": self._overlap,
+            "downsample_short_side": self._downsample_short_side,
+            "downsample_method": "pil_box_float" if self._downsample_short_side else None,
             "source_hashes": self._source_hashes(),
         }
         manifest_path = os.path.join(self.save_dir, "restoration_manifest.json")
@@ -505,16 +540,19 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         elapsed = time.perf_counter() - start
 
         if self.rank <= 0:
-            target_description = make_target_description(self._source_description, provenance)
-            target_config_path = os.path.join(self._output_root, os.path.basename(self._source_config_path))
-            with open(target_config_path, "wt", encoding="utf-8") as file:
-                json.dump(target_description, file, indent=2)
-
             if any(result is None for result in results):
                 raise RuntimeError("At least one YUV restoration task did not return a result")
             sequence_results = {
                 f"{result['class_name']}/{result['seq_name']}": result for result in results if result is not None
             }
+            target_description = make_target_description(self._source_description, provenance)
+            for result in sequence_results.values():
+                sequence = target_description["test_classes"][result["class_name"]]["sequences"][result["seq_name"]]
+                sequence["width"], sequence["height"] = result["width"], result["height"]
+            target_config_path = os.path.join(self._output_root, os.path.basename(self._source_config_path))
+            with open(target_config_path, "wt", encoding="utf-8") as file:
+                json.dump(target_description, file, indent=2)
+
             summary = {
                 "model": provenance,
                 "source_config": self._source_config_path,
@@ -531,6 +569,10 @@ class RestoreVimeoBasicVSRPP(BaseApp):
             torch.distributed.barrier()
 
     def run(self):
+        short_side = self.get_config_by_path("dataset.downsample_short_side", default=0)
+        if type(short_side) is not int or (short_side != 0 and (short_side < 4 or short_side % 2)):
+            raise ValueError("dataset.downsample_short_side must be zero (disabled) or an even integer of at least 4")
+        self._downsample_short_side = short_side
         description_path = self.get_config_by_path("dataset.description_path", default=None)
         test_config = self.get_config_by_path("dataset.config", default=None)
         if bool(description_path) == bool(test_config):

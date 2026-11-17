@@ -378,3 +378,30 @@ Copyright (c) OpenMMLab and the BasicVSR++ authors (Kelvin C.K. Chan et al.)
 Licensed under the Apache License, Version 2.0. The full text of the Apache
 License 2.0 is reproduced above (see the piq entry).
 ---------------------------------------------------------
+---------------------------------------------------------
+
+https://github.com/sunwei925/SimpleVQA
+
+Portions of `video/src/metrics/simple_vqa/model.py` and
+`video/src/metrics/simple_vqa/scorer.py` are adapted from SimpleVQA revision
+017edda50e8cdbeb48113a001dbb9af0dbd2030b.
+Modified for streaming feature extraction and repository integration.
+
+Licensed under the Apache License, Version 2.0. The full text of the Apache
+License 2.0 is reproduced above (see the piq entry). The upstream license is
+also retained in `video/src/metrics/simple_vqa/LICENSE`.
+---------------------------------------------------------
+---------------------------------------------------------
+
+https://github.com/facebookresearch/pytorchvideo
+
+`video/src/metrics/simple_vqa/slowfast.py` is adapted from PyTorchVideo 0.1.5.
+Modified to retain only the fixed SlowFast-R50 (8x8) inference architecture.
+
+Copyright 2019, Facebook, Inc
+Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0. The full text of the Apache
+License 2.0 is reproduced above (see the piq entry). The upstream license is
+also retained in `video/src/metrics/simple_vqa/LICENSE.pytorchvideo`.
+---------------------------------------------------------

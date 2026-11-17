@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 from typing import Optional, Dict, Any
+from fractions import Fraction
 
 import torch
 
@@ -18,11 +19,24 @@ __all__ = ["FrameReaderModelAdapter", "FrameReaderModelFactory"]
 
 
 class FrameReaderModelAdapter(torch.nn.Module):
-    def __init__(self, streamname: str, *, width: int, height: int, stream_format: str, bits: Optional[torch.Tensor]):
+    def __init__(
+        self,
+        streamname: str,
+        *,
+        width: int,
+        height: int,
+        stream_format: str,
+        bits: Optional[torch.Tensor],
+    ):
         super().__init__()
+        self.streamname = streamname
+        self.frame_count = None
+        self.frame_rate = None
+        self.width, self.height = width, height
 
         if stream_format != "yuv":
-            s_width, s_height, n_frames, s_bits = self._get_stream_info(streamname, bits is None)
+            s_width, s_height, n_frames, s_bits, self.frame_rate = self._get_stream_info(streamname, bits is None)
+            self.frame_count = n_frames
             if width != s_width or height != s_height:
                 raise ValueError(f"{streamname}: frame size mismatch: {s_width}x{s_height}, expected {width}x{height}")
             if bits is None:
@@ -97,7 +111,16 @@ class FrameReaderModelAdapter(torch.nn.Module):
 
                 bits = torch.tensor(bits, dtype=torch.float64)
 
-            return width, height, n_frames, bits
+            rate = stream_info.get("avg_frame_rate")
+            frame_rate = None
+            if rate is not None and rate != "0/0":
+                try:
+                    parsed_rate = Fraction(rate)
+                except (ValueError, ZeroDivisionError):
+                    parsed_rate = None
+                if parsed_rate is not None and parsed_rate > 0:
+                    frame_rate = float(parsed_rate)
+            return width, height, n_frames, bits, frame_rate
         except Exception as e:
             raise ValueError(f"{streamname}: invalid ffprobe output") from e
 
@@ -183,5 +206,9 @@ class FrameReaderModelFactory:
         )
         streamname = os.path.join(self.clip_folder, task.dataset_name, streamname)
         return FrameReaderModelAdapter(
-            streamname, width=task.src_width, height=task.src_height, stream_format=self.clip_format, bits=bits
+            streamname,
+            width=task.src_width,
+            height=task.src_height,
+            stream_format=self.clip_format,
+            bits=bits,
         ).to(self.device)

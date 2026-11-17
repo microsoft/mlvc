@@ -42,18 +42,22 @@ class FastVideoFolder(Dataset):
         padding_simulation_alignment: str = "bottom_right",
         target_description_path: Optional[str] = None,
         target_prob: float = 1.0,
+        exact_resizing: bool = False,
     ):
         """
         crop_method could be 'center', 'random'
         frame_selection could be 'random', 'fix'
         target_prob controls per-sample probabilistic
         dual-target training when target_description_path is set
+        exact_resizing scales the input and target to one input-derived size
+        instead of using an integer downsampling factor
         """
         self.root_folder_path = os.path.dirname(description_path)
 
         seqs = self._load_dataset_description(description_path)
         self._validate_seqs(seqs, description_path)
         self.seqs = seqs
+        self.exact_resizing = bool(exact_resizing)
 
         self.target_root_folder_path: Optional[str] = None
         self.target_seqs: Optional[list] = None
@@ -61,7 +65,9 @@ class FastVideoFolder(Dataset):
             self.target_root_folder_path = os.path.dirname(target_description_path)
             target_seqs = self._load_dataset_description(target_description_path)
             self._validate_seqs(target_seqs, target_description_path)
-            self._validate_target_alignment(seqs, target_seqs, description_path, target_description_path)
+            self._validate_target_alignment(
+                seqs, target_seqs, description_path, target_description_path, self.exact_resizing
+            )
             self.target_seqs = target_seqs
 
         if not (0.0 <= target_prob <= 1.0):
@@ -230,18 +236,36 @@ class FastVideoFolder(Dataset):
                 raise ValueError(f"Sequence #{i} missing keys {missing} in {description_path}")
 
     @staticmethod
-    def _validate_target_alignment(input_seqs, target_seqs, input_path, target_path):
+    def _validate_target_alignment(input_seqs, target_seqs, input_path, target_path, exact_resizing=False):
         if len(input_seqs) != len(target_seqs):
             raise ValueError(
                 f"Target description has {len(target_seqs)} seqs but input has "
                 f"{len(input_seqs)} ({input_path} vs {target_path})"
             )
         for i, (a, b) in enumerate(zip(input_seqs, target_seqs)):
-            for key in ("path", "seq_length", "width", "height"):
+            keys = ("path", "seq_length") if exact_resizing else ("path", "seq_length", "width", "height")
+            for key in keys:
                 if a[key] != b[key]:
                     raise ValueError(
                         f"Target seq #{i} differs from input on key {key!r}: "
                         f"input={a[key]!r}, target={b[key]!r} "
+                        f"({input_path} vs {target_path})"
+                    )
+            if exact_resizing:
+                input_width, input_height = a["width"], a["height"]
+                target_width, target_height = b["width"], b["height"]
+                if min(input_width, input_height, target_width, target_height) <= 0:
+                    raise ValueError(f"Target seq #{i} has non-positive dimensions ({input_path} vs {target_path})")
+                input_ratio = input_width / input_height
+                target_ratio = target_width / target_height
+                # Allow pixel rounding at independently generated input/target resolutions.
+                tolerance = input_ratio * (1 / input_width + 1 / input_height) + target_ratio * (
+                    1 / target_width + 1 / target_height
+                )
+                if abs(input_ratio - target_ratio) > tolerance:
+                    raise ValueError(
+                        f"Target seq #{i} has incompatible aspect ratio: "
+                        f"input={input_width}x{input_height}, target={target_width}x{target_height} "
                         f"({input_path} vs {target_path})"
                     )
             if a["frames"] != b["frames"]:
@@ -438,10 +462,15 @@ class FastVideoFolder(Dataset):
         if target_resolution:
             if not self.allow_tiling:
                 target_resolution = max(target_resolution, self.patch_h, self.patch_w)
-            downsample_factor = max(1, min(width, height) // target_resolution)
-            if downsample_factor != 1:
-                width //= downsample_factor
-                height //= downsample_factor
+            if self.exact_resizing:
+                scale = target_resolution / min(width, height)
+                width = round(width * scale)
+                height = round(height * scale)
+            else:
+                downsample_factor = max(1, min(width, height) // target_resolution)
+                if downsample_factor != 1:
+                    width //= downsample_factor
+                    height //= downsample_factor
 
         if self.enable_random_zoom:
             zoom_factor = random.uniform(self.min_zoom_factor, self.max_zoom_factor)
@@ -485,7 +514,7 @@ class FastVideoFolder(Dataset):
             assert False
 
         resampling_method = None
-        if (source_width, source_height) != (width, height):
+        if self.exact_resizing or (source_width, source_height) != (width, height):
             resampling_method = self._sample_categorical(self.resampling_method)
 
         augparams = dict(
@@ -595,6 +624,11 @@ class FastVideoFolder(Dataset):
                         raise RuntimeError("Target frame futures are not initialized")
                     target_data_arr = self._collect_frame_futures(target_futures)
                 target_tensor = torch.as_tensor(target_data_arr.astype(np.float32) / 255.0)
+                if target_tensor.shape != video_tensor.shape:
+                    raise ValueError(
+                        f"Target shape {tuple(target_tensor.shape)} differs from input shape "
+                        f"{tuple(video_tensor.shape)} for sequence {seq_path} at index {index}"
+                    )
                 if pad_mask is not None:
                     target_tensor[:, pad_mask] = self.padding_simulation_value
                 result["target_video"] = target_tensor
@@ -719,7 +753,7 @@ class FastVideoFolder(Dataset):
         else:
             img = Image.open(img_path).convert("RGB")
 
-        if resampling_method is not None:
+        if resampling_method is not None and img.size != resize_size:
             img = img.resize(resize_size, resampling_method)
         if flip:
             img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
@@ -738,7 +772,7 @@ class FastVideoFolder(Dataset):
 
     @staticmethod
     def _tile(img, n_tile_w, n_tile_h):
-        new_img = Image.new("RGB", (img.width * n_tile_w, img.height * n_tile_h))
+        new_img = Image.new(img.mode, (img.width * n_tile_w, img.height * n_tile_h))
         srcs = ([img, Image.Transpose.FLIP_TOP_BOTTOM], [Image.Transpose.FLIP_LEFT_RIGHT, Image.Transpose.ROTATE_180])
         for i in range(n_tile_w):
             x = i * img.width
