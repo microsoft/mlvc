@@ -13,10 +13,20 @@ model:
   mid_channels: 128
   num_blocks: 25
   chunk_size: 32
-  overlap: 4
+  # Halo-discard inference: 8 context frames per side.
+  overlap: 8
 
 dataset:
+  # Image inputs. For YUV inputs, replace description_path with config and data_path.
   description_path: data/Vimeo-MSRA/vimeo_train32_360p_2/description.json
+  # config: data/VCD2/yuv/960x540/VCD2_960x540_extended_200s.json
+  # data_path: data/VCD2/yuv/960x540
+  # Zero disables resizing; otherwise use an even short side of at least 4, e.g. 540.
+  # Nearest-even long side, no upscaling. PIL BOX: uint8 RGB images, float32 RGB YUV inputs.
+  # downsample_short_side: 0
 
 output:
   quality: 100
+  # Image outputs only; originals are unchanged. Outputs go to save_dir/restored.
+  # format: auto  # auto, jpeg, png or webp; auto preserves input filenames.
+  # webp_lossless: false  # false uses quality-controlled lossy WebP.

@@ -4,6 +4,7 @@
 """TrainVideoApp integration with torch.compile; compile logic itself is covered by test_torch_compile_manager.py."""
 
 import copy
+from unittest.mock import Mock
 
 import pytest
 import torch
@@ -312,6 +313,105 @@ def test_deqa_metrics_are_not_logged_on_regular_test_epochs(app):
     assert logged == [{"set_p_frame_psnr000": 30.0}]
     with pytest.raises(KeyError):
         app.log_benchmark_metrics(results, testset_name="set", config=config, epoch=0)
+
+
+@pytest.mark.parametrize(
+    "config,benchmark_epochs,score_epochs",
+    [
+        ({"test_interval": 2, "calc_simple_vqa": True}, {1, 3, 5}, {1, 3, 5}),
+        ({"test_interval": 1, "calc_simple_vqa": True, "simple_vqa_test_interval": 3}, set(range(6)), {2, 5}),
+        ({"test_interval": 0, "calc_simple_vqa": True, "simple_vqa_test_interval": 3}, {2, 5}, {2, 5}),
+        ({"test_interval": 2, "calc_simple_vqa": True, "simple_vqa_test_interval": 0}, {1, 3, 5}, set()),
+        ({"test_interval": 0, "simple_vqa_test_interval": 1}, set(), set()),
+    ],
+)
+def test_simple_vqa_has_an_independent_training_interval(config, benchmark_epochs, score_epochs):
+    assert {e for e in range(6) if TrainVideoApp.is_testset_benchmark_epoch(config, e)} == benchmark_epochs
+    assert {e for e in range(6) if TrainVideoApp.is_testset_simple_vqa_epoch(config, e)} == score_epochs
+    assert TrainVideoApp.is_testset_simple_vqa_epoch(config, None) == config.get("calc_simple_vqa", False)
+
+
+@pytest.mark.parametrize(
+    "epoch,requested_metrics,expected_metrics",
+    [
+        (0, ["psnr", "simple_vqa"], ["psnr"]),
+        (0, ["simple_vqa"], []),
+        (2, ["psnr", "simple_vqa"], ["psnr", "simple_vqa"]),
+        (None, ["simple_vqa"], ["simple_vqa"]),
+    ],
+)
+def test_simple_vqa_bdrate_follows_scoring_interval(
+    app, tmp_path, monkeypatch, epoch, requested_metrics, expected_metrics
+):
+    from src.utils.encoder_tester import EncoderTestParams
+
+    app.config.update({"save_dir": str(tmp_path), "aux_mounts": {}})
+    app._metrics_writer = Mock()
+    app._auxiliary_models = Mock()
+    config = {
+        "config": "testset.json",
+        "anchor": str(tmp_path / "anchor.json"),
+        "test_interval": 1,
+        "calc_simple_vqa": True,
+        "simple_vqa_test_interval": 3,
+        "distortion_metrics": requested_metrics,
+    }
+    params = EncoderTestParams(
+        is_yuv420=True,
+        calc_simple_vqa=TrainVideoApp.is_testset_simple_vqa_epoch(config, epoch),
+    )
+    compare = Mock()
+    monkeypatch.setattr("src.utils.app.run_encoder_test", Mock(return_value={}))
+    monkeypatch.setattr("src.utils.app.compare_test_with_anchor", compare)
+
+    app._run_encoder_test("set", config=config, params=params, epoch=epoch, i_frame_model=None, p_frame_model=None)
+
+    if expected_metrics:
+        compare.assert_called_once()
+        assert compare.call_args.kwargs["distortion_metrics"] == expected_metrics
+    else:
+        compare.assert_not_called()
+
+
+def test_simple_vqa_logging_skips_failed_scores_and_unscored_epochs(app):
+    logged = []
+    app._metrics_writer = type("Writer", (), {"add_metrics": lambda self, metrics, step: logged.append(metrics)})()
+    results = {
+        "class": {
+            "a": {21: {"ave_p_frame_psnr": 30.0, "ave_all_frame_simple_vqa": None}},
+            "b": {21: {"ave_p_frame_psnr": 30.0, "ave_all_frame_simple_vqa": 3.0}},
+        }
+    }
+    config = {"log_metrics": ["p_frame_psnr", "all_frame_simple_vqa"]}
+
+    app.log_benchmark_metrics(results, testset_name="set", config=config, epoch=0)
+    app.log_benchmark_metrics(
+        {"class": {"a": {21: {"ave_p_frame_psnr": 30.0}}}},
+        testset_name="set",
+        config=config,
+        epoch=1,
+        skip_simple_vqa=True,
+    )
+    app.log_benchmark_metrics(
+        {"class": {"a": {21: {"ave_p_frame_psnr": 30.0, "ave_all_frame_simple_vqa": None}}}},
+        testset_name="set",
+        config=config,
+        epoch=2,
+    )
+    assert logged == [
+        {"set_p_frame_psnr000": 30.0, "set_all_frame_simple_vqa000": 3.0},
+        {"set_p_frame_psnr000": 30.0},
+        {"set_p_frame_psnr000": 30.0},
+    ]
+
+    # Failures of other metrics are not silently dropped from the mean.
+    with pytest.raises(TypeError):
+        app.log_benchmark_metrics(
+            {"class": {"a": {21: {"all_frame_deqa_score_rgb": None}}, "b": {21: {"all_frame_deqa_score_rgb": 3.0}}}},
+            testset_name="set",
+            config={"log_metrics": ["all_frame_deqa_score_rgb"]},
+            epoch=3,
+        )
 
 
 def test_ane_simulation_with_compiled_checkpoint_raises():

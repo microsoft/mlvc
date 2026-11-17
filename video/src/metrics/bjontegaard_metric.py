@@ -1,15 +1,38 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+import warnings
 from typing import Optional
 
 import numpy as np
 import scipy.interpolate
 
 
+def _rate_quality_envelope(rate, metric, *, curve: str):
+    """Sort rate-quality pairs by rate and keep only points whose quality exceeds every cheaper point."""
+    rate = np.asarray(rate, dtype=float)
+    metric = np.asarray(metric, dtype=float)
+    order = np.argsort(rate, kind="stable")
+    rate, metric = rate[order], metric[order]
+    best_cheaper = np.maximum.accumulate(np.concatenate(([-np.inf], metric[:-1])))
+    keep = metric > best_cheaper
+    if not keep.all():
+        warnings.warn(
+            f"Piecewise BD-rate: ignoring {curve} point(s) with a higher rate but no better quality than a cheaper "
+            f"point: rate={rate[~keep].tolist()}, quality={metric[~keep].tolist()}. "
+            f"Full {curve} curve: rate={rate.tolist()}, quality={metric.tolist()}",
+            stacklevel=3,
+        )
+    return rate[keep], metric[keep]
+
+
 def calculate_bd_rate(
     r1, metric1, r2, metric2, *, piecewise=0, lower_bound: Optional[float] = None, upper_bound: Optional[float] = None
 ):
+    if piecewise != 0:
+        r1, metric1 = _rate_quality_envelope(r1, metric1, curve="anchor")
+        r2, metric2 = _rate_quality_envelope(r2, metric2, curve="test")
+
     lR1 = np.log(r1)
     lR2 = np.log(r2)
 
@@ -37,8 +60,8 @@ def calculate_bd_rate(
         lin = np.linspace(min_int, max_int, num=100, retstep=True)
         interval = lin[1]
         samples = lin[0]
-        v1 = scipy.interpolate.pchip_interpolate(np.sort(metric1), np.sort(lR1), samples)
-        v2 = scipy.interpolate.pchip_interpolate(np.sort(metric2), np.sort(lR2), samples)
+        v1 = scipy.interpolate.pchip_interpolate(metric1, lR1, samples)
+        v2 = scipy.interpolate.pchip_interpolate(metric2, lR2, samples)
         # Calculate the integral using the trapezoid method on the samples.
         int1 = np.trapezoid(v1, dx=float(interval))
         int2 = np.trapezoid(v2, dx=float(interval))

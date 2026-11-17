@@ -146,6 +146,13 @@ Download the LPIPS VGG16 weights file [`vgg.pth`](https://github.com/richzhang/P
 We provide experimental support for the [DeQA-Score](https://github.com/zhiyuanyou/DeQA-Score) no-reference metric which uses LLaMa2-7B.
 Download the weights from their [HuggingFace page](https://huggingface.co/zhiyuanyou/DeQA-Score-Mix3) and place them in `~/mlvc/job-outputs/pretrained/DeQA-Score-Mix3`.
 
+#### SimpleVQA
+
+SimpleVQA is an optional no-reference video-quality metric for benchmark and training-validation
+videos. Place the [official `UGC_BVQA_model.pth`](https://github.com/sunwei925/SimpleVQA)
+and [`SLOWFAST_8x8_R50.pyth`](https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/SLOWFAST_8x8_R50.pyth)
+in `~/mlvc/job-outputs/pretrained/SimpleVQA`. See [SimpleVQA](video/docs/SIMPLE_VQA.md) for usage.
+
 #### Face segmentation
 
 FarL and RetinaFace are needed only to generate face segmentation masks or to calculate face-region metrics without precomputed masks.

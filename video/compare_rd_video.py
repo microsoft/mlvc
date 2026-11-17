@@ -68,6 +68,7 @@ def parse_args():
             "psnr_inv_roi",
             "lpips",
             "deqa_score_rgb",
+            "simple_vqa",
         ],
         help="distortion metrics used to calculate BD-Rate and plot",
     )
@@ -344,7 +345,7 @@ class RDTester:
 
         self.ds_seq_names = None
 
-    def parse_logs(self):
+    def parse_logs(self, distortion_metric=None):
         json_dict = {}  # model -> dataset -> seq -> [models]
         ds_seq_names = {}
         seq_consistency = True
@@ -361,13 +362,49 @@ class RDTester:
                             seq_consistency = False
                     for seq in json_data[ds_name]:
                         json_dict[key_method][ds_name][seq] = {}
-                        rate_points = list(json_data[ds_name][seq].keys())
+                        rate_points = [
+                            rate
+                            for rate in json_data[ds_name][seq]
+                            if distortion_metric != "simple_vqa"
+                            or self.rate_exclude is None
+                            or rate not in self.rate_exclude
+                        ]
+                        if distortion_metric == "simple_vqa":
+                            for rate in rate_points:
+                                point = json_data[ds_name][seq][rate]
+                                for name in ("ave_all_frame_simple_vqa", "ave_all_frame_bpp"):
+                                    value = point.get(name)
+                                    if (
+                                        not isinstance(value, (int, float))
+                                        or isinstance(value, bool)
+                                        or not np.isfinite(value)
+                                        or (name == "ave_all_frame_bpp" and value <= 0)
+                                    ):
+                                        raise ValueError(f"Invalid {name}: {key_method}/{ds_name}/{seq}/{rate}")
                         seq_bpps = [json_data[ds_name][seq][r_p]["ave_all_frame_bpp"] for r_p in rate_points]
                         rate_points = sorted(rate_points, key=lambda x: seq_bpps[rate_points.index(x)])
                         for r_p_idx, rate_point in enumerate(rate_points):
                             if self.rate_exclude is not None and rate_point in self.rate_exclude:
                                 continue
-                            json_dict[key_method][ds_name][seq][r_p_idx] = json_data[ds_name][seq][rate_point]
+                            key = rate_point if distortion_metric == "simple_vqa" else r_p_idx
+                            json_dict[key_method][ds_name][seq][key] = json_data[ds_name][seq][rate_point]
+        if distortion_metric == "simple_vqa":
+            populations = {
+                method: {dataset: set(sequences) for dataset, sequences in datasets.items()}
+                for method, datasets in json_dict.items()
+            }
+            expected = populations[self.base_method_name]
+            if not expected or any(population != expected for population in populations.values()):
+                raise ValueError("SimpleVQA requires matching datasets and clips")
+            for method, datasets in json_dict.items():
+                for dataset, sequences in datasets.items():
+                    ladders = [set(points) for points in sequences.values()]
+                    if not ladders or not ladders[0] or any(ladder != ladders[0] for ladder in ladders):
+                        raise ValueError(
+                            f"SimpleVQA requires the same named rate ladder for every clip: {method}/{dataset}"
+                        )
+                    if len(ladders[0]) < 3:
+                        raise ValueError(f"SimpleVQA requires at least 3 rate points: {method}/{dataset}")
         if not seq_consistency:
             warnings.warn("inconsistency found in the sequences tested in each dataset")
 
@@ -376,6 +413,8 @@ class RDTester:
         return json_dict
 
     def retrieve_data(self, json_dict, frame_type, base_method_name, distortion_metric):
+        if distortion_metric == "simple_vqa" and frame_type != "all":
+            raise ValueError("SimpleVQA is a whole-video metric; use --compare_frame_type all or default")
         max_num_bitrate = 0
         data_dict = {}
         for key_method in json_dict:
@@ -405,7 +444,16 @@ class RDTester:
                 )
                 assert data_dict[base_method_name][ds_name]["bpp"][0] >= 0, "Bitrate must be positive!"
                 assert data_dict[key_method][ds_name][distortion_metric][0] is not None, "Distortion metric must exist!"
-                assert data_dict[key_method][ds_name][distortion_metric][0] > 0, "Distortion metric must be positive!"
+                if distortion_metric == "simple_vqa":
+                    qualities = [
+                        data_dict[method][ds_name][distortion_metric] for method in (base_method_name, key_method)
+                    ]
+                    if max(map(min, qualities)) >= min(map(max, qualities)):
+                        raise ValueError(f"SimpleVQA has no common quality interval: {key_method}/{ds_name}")
+                else:
+                    assert data_dict[key_method][ds_name][distortion_metric][0] > 0, (
+                        "Distortion metric must be positive!"
+                    )
 
                 results[distortion_metric][key_method][ds_name] = calculate_bd_rate(
                     data_dict[base_method_name][ds_name]["bpp"],
@@ -414,22 +462,29 @@ class RDTester:
                     data_dict[key_method][ds_name][distortion_metric],
                     piecewise=1,
                 )
+                if distortion_metric == "simple_vqa" and not np.isfinite(
+                    results[distortion_metric][key_method][ds_name]
+                ):
+                    raise ValueError(f"Nonfinite SimpleVQA BD-rate: {key_method}/{ds_name}")
 
         return data_dict, results, max_num_bitrate
 
     def main(self):
-
-        json_dict = self.parse_logs()
-        assert self.ds_seq_names is not None
-        all_dataset_names = sorted(list(self.ds_seq_names.keys()))
-
+        if "simple_vqa" in self.distortion_metrics and self.compare_frame_type in ("i", "p"):
+            raise ValueError("SimpleVQA is a whole-video metric; use --compare_frame_type all or default")
         for distortion_metric in self.distortion_metrics:
+            json_dict = self.parse_logs(distortion_metric)
+            assert self.ds_seq_names is not None
             self.results[distortion_metric] = {}
 
             cls_result_dict = mean_over_sequence(json_dict, distortion_metric)
             all_dataset_names = sorted(list(self.ds_seq_names.keys()))
             all_sequence_names = {}
             if self.compare_between == "sequence":
+                if distortion_metric == "simple_vqa":
+                    names = [name for sequences in self.ds_seq_names.values() for name in sequences]
+                    if len(names) != len(set(names)):
+                        raise ValueError("SimpleVQA sequence comparison requires unique sequence names across datasets")
                 seq_json_dict = flatten_test_results(json_dict)
                 for key, value in self.ds_seq_names.items():
                     all_sequence_names[key] = []
@@ -437,7 +492,7 @@ class RDTester:
                         all_sequence_names[key].append(seq)
 
             if self.compare_frame_type == "default":
-                frame_types = ["i", "p", "all"]
+                frame_types = ["all"] if distortion_metric == "simple_vqa" else ["i", "p", "all"]
             else:
                 frame_types = [self.compare_frame_type]
 
@@ -456,6 +511,8 @@ class RDTester:
                         seq_results_list[distortion_metric],
                         results_list[distortion_metric],
                     )
+                    if distortion_metric == "simple_vqa":
+                        self.results[distortion_metric][frame_type] = seq_results_list[distortion_metric]
                     frame_data, results_list[distortion_metric], max_num_bitrate = (
                         seq_frame_data,
                         seq_results_list[distortion_metric],

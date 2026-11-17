@@ -1765,8 +1765,27 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         return cls._is_interval_epoch(deqa_test_interval, epoch)
 
     @classmethod
+    def is_testset_simple_vqa_epoch(cls, config, epoch, *, decoder=False):
+        if decoder:
+            decoder_config = config.get("decoder_metrics")
+            if not isinstance(decoder_config, Mapping) or not decoder_config.get("name"):
+                return False
+            config = {**config, "calc_simple_vqa": False, **decoder_config}
+        if not config.get("calc_simple_vqa", False):
+            return False
+        interval = config.get("simple_vqa_test_interval")
+        if interval is None:
+            interval = config.get("test_interval")
+        return cls._is_interval_epoch(interval, epoch)
+
+    @classmethod
     def is_testset_benchmark_epoch(cls, config, epoch):
-        return cls._is_interval_epoch(config.get("test_interval"), epoch) or cls.is_testset_deqa_epoch(config, epoch)
+        return (
+            cls._is_interval_epoch(config.get("test_interval"), epoch)
+            or cls.is_testset_deqa_epoch(config, epoch)
+            or cls.is_testset_simple_vqa_epoch(config, epoch)
+            or cls.is_testset_simple_vqa_epoch(config, epoch, decoder=True)
+        )
 
     def add_step_info(
         self, keys: Dict[str, int], values: torch.Tensor, *, qp_num: int = 1, q_index: Optional[torch.Tensor] = None
@@ -1899,6 +1918,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             calc_lpips=config.get("calc_lpips", False),
             calc_lrwer_rgb=config.get("calc_lrwer_rgb", False),
             calc_deqa_score_rgb=self.is_testset_deqa_epoch(config, epoch),
+            calc_simple_vqa=self.is_testset_simple_vqa_epoch(config, epoch),
             calc_hrd_metrics=config.get("calc_hrd_metrics", False),
             encode_bit_stream=config.get("encode_bit_stream", False),
             calc_bits_estimates=config.get("calc_bits_estimates", False),
@@ -2102,12 +2122,14 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         if self.rank <= 0:
             # DeQA is enabled for this testset but skipped on this epoch (see deqa_test_interval).
             skip_deqa = bool(config.get("calc_deqa_score_rgb", False)) and not params.calc_deqa_score_rgb
+            skip_simple_vqa = bool(config.get("calc_simple_vqa", False)) and not params.calc_simple_vqa
             self.log_benchmark_metrics(
                 results,
                 testset_name=testset_name,
                 config=config,
                 epoch=epoch,
                 skip_deqa=skip_deqa,
+                skip_simple_vqa=skip_simple_vqa,
             )
 
             anchor_path = config.get("anchor")
@@ -2115,10 +2137,12 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             distortion_metrics = config.get("distortion_metrics", ("psnr",))
             if skip_deqa:
                 distortion_metrics = [name for name in distortion_metrics if "deqa" not in name]
+            if skip_simple_vqa:
+                distortion_metrics = [name for name in distortion_metrics if "simple_vqa" not in name]
 
             def report():
                 try:
-                    if anchor_path:
+                    if anchor_path and distortion_metrics:
                         compare_test_with_anchor(
                             epoch=epoch or 0,
                             anchor_results_path=self.resolve_path(anchor_path, default_source="checkpoints_mount"),
@@ -2175,6 +2199,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             calc_ssim=decoder_config.get("calc_ssim", encoder_params.calc_ssim),
             calc_ssim_rgb=decoder_config.get("calc_ssim_rgb", encoder_params.calc_ssim_rgb),
             calc_vif=decoder_config.get("calc_vif", encoder_params.calc_vif),
+            calc_simple_vqa=self.is_testset_simple_vqa_epoch(config, epoch, decoder=True),
             calc_hrd_metrics=decoder_config.get("calc_hrd_metrics", encoder_params.calc_hrd_metrics),
             frame_rate=decoder_config.get("frame_rate", encoder_params.frame_rate),
             use_i_frame_model=encoder_params.use_i_frame_model,
@@ -2207,6 +2232,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         config: Mapping[str, Any],
         epoch: Optional[int],
         skip_deqa: bool = False,
+        skip_simple_vqa: bool = False,
     ):
         log_metrics = config.get("log_metrics")
         if log_metrics is None or len(log_metrics) == 0:
@@ -2214,8 +2240,12 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         if skip_deqa:
             # DeQA is not computed on regular test epochs (see deqa_test_interval).
             log_metrics = [name for name in log_metrics if "deqa" not in name]
+        if skip_simple_vqa:
+            log_metrics = [name for name in log_metrics if "simple_vqa" not in name]
 
         metrics = dict()
+        # SimpleVQA scoring failures are reported per clip as None; other metrics keep failing loudly.
+        simple_vqa_failures: Dict[str, int] = dict()
         for ds in results.values():
             for s in ds.values():
                 for rate, r in enumerate(s.values()):
@@ -2225,15 +2255,31 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
                         if value_list is None:
                             metrics[name] = value_list = list()
 
-                        if metric_name in r:
-                            value_list.append(r[metric_name])
+                        value = r[metric_name] if metric_name in r else r[f"ave_{metric_name}"]
+                        if value is None and "simple_vqa" in metric_name:
+                            simple_vqa_failures[name] = simple_vqa_failures.get(name, 0) + 1
                         else:
-                            value_list.append(r[f"ave_{metric_name}"])
+                            value_list.append(value)
 
-        self.metrics_writer.add_metrics(
-            {name: np.asarray(value_list).mean() for name, value_list in metrics.items()},
-            step=epoch,
-        )
+        for name, failed in simple_vqa_failures.items():
+            valid = len(metrics[name])
+            if valid == 0:
+                logging.warning("Skipping benchmark metric %s: all %d clips failed SimpleVQA scoring", name, failed)
+                del metrics[name]
+            else:
+                logging.warning(
+                    "Benchmark metric %s: %d/%d clips failed SimpleVQA scoring; mean is over %d clips",
+                    name,
+                    failed,
+                    failed + valid,
+                    valid,
+                )
+
+        if metrics:
+            self.metrics_writer.add_metrics(
+                {name: np.asarray(value_list).mean() for name, value_list in metrics.items()},
+                step=epoch,
+            )
 
     def _log_ane_divergence_metrics(self, results, *, testset_name: str, epoch: Optional[int]):
         """Log the ANE divergence metrics that need non-mean aggregation, per rate."""

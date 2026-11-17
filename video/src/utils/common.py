@@ -141,6 +141,12 @@ class AuxiliaryModels:
             raise ValueError("Pretrained path is required for DeQA-Score model")
         return self._load_deqa_score_model()
 
+    @cached_property
+    def simple_vqa_model(self):
+        from src.metrics.simple_vqa.scorer import SimpleVQA
+
+        return SimpleVQA(self.pretrained_path, self.device, self.config.get("simple_vqa", {}))
+
     def offload_deqa_score_model(self):
         if "deqa_score_model" not in self.__dict__:
             return
@@ -151,6 +157,9 @@ class AuxiliaryModels:
 
     def offload_heavy_models(self):
         self.offload_deqa_score_model()
+        if "simple_vqa_model" in self.__dict__:
+            del self.__dict__["simple_vqa_model"]
+            logging.info("Offloaded SimpleVQA model")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 

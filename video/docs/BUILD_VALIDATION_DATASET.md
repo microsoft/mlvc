@@ -34,6 +34,13 @@ Validate models on the new dataset - see **Running Evaluation** in `README.md`.
 and `dataset.data_path`. Configure exactly one description mode and supply
 BasicVSR++ checkpoint weights using `model.weights_path`.
 
+Optional input downsampling is available via `dataset.downsample_short_side`
+(e.g. `540`; default `0` disables it). Both modes use PIL BOX before inference,
+with nearest-even dimensions and no upscaling; YUV inputs retain float32 RGB.
+When using resized outputs as evaluation references, the evaluation inputs must
+have matching dimensions for each sequence. This script leaves the originals
+unchanged; prepare matching-resolution inputs separately.
+
 Create a configuration for your dataset and checkpoint using the settings
 above. From the `video` directory:
 

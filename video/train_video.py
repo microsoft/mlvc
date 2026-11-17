@@ -389,6 +389,7 @@ class TrainVideoApp(BaseTrainVideoApp):
 
     def create_video_dataset(self, config, patch_w, patch_h, default_config):
         target_resolution = config.get("target_resolution", default_config.get("target_resolution"))
+        exact_resizing = config.get("exact_resizing", default_config.get("exact_resizing", False))
         allow_tiling = config.get("allow_tiling", default_config.get("allow_tiling"))
         resampling_method = config.get("resampling_method", default_config.get("resampling_method"))
         frame_selection = config.get("frame_selection", default_config.get("frame_selection", "random"))
@@ -424,6 +425,7 @@ class TrainVideoApp(BaseTrainVideoApp):
             patch_h,
             crop_method="random",
             target_resolution=target_resolution,
+            exact_resizing=exact_resizing,
             allow_tiling=allow_tiling,
             resampling_method=resampling_method,
             frame_selection=frame_selection,
