@@ -18,6 +18,12 @@ dependencies = [
     "onnxscript",
     "onnxconverter_common",
     "coremltools",
+    "openvino; sys_platform != 'darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64')",
+    # ONNX Runtime (onnxruntime-gpu 1.27+ needs CUDA 13; torch uses CUDA 12)
+    "onnxruntime<1.27; sys_platform == 'darwin' or (platform_machine != 'x86_64' and platform_machine != 'AMD64')",
+    "onnxruntime-gpu<1.27; sys_platform != 'darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64')",
+    "onnxruntime-ep-openvino; sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "onnxruntime-qnn>=2; sys_platform == 'win32' and platform_machine == 'ARM64'",
     # Azure
     "cryptography<=46.0.3; sys_platform == 'win32' and platform_machine == 'ARM64'", # Latest versions missing ARM64 Windows wheels
     "azure-identity",
@@ -31,25 +37,6 @@ dependencies = [
     "sentencepiece; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "transformers>=5.14.1,<6; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "pyfacer; sys_platform != 'win32' or platform_machine != 'ARM64'",
-]
-
-[project.optional-dependencies]
-onnxruntime = ["onnxruntime"]
-onnxruntime-gpu = [
-    "onnxruntime-gpu; sys_platform == 'linux' or (sys_platform == 'win32' and platform_machine == 'AMD64')",
-]
-onnxruntime-openvino = [
-    "onnxruntime-openvino==1.24.1; sys_platform == 'win32' and platform_machine == 'AMD64'",
-    "openvino==2025.4.1; sys_platform == 'win32' and platform_machine == 'AMD64'",
-]
-onnxruntime-qnn = [
-    "onnxruntime-qnn==1.24.4; sys_platform == 'win32' and platform_machine == 'ARM64'",
-]
-onnxruntime-windowsml = [
-    "winrt-Windows.Foundation; sys_platform == 'win32'",
-    "winrt-Windows.ApplicationModel; sys_platform == 'win32'",
-    "wasdk-Microsoft.Windows.AI.MachineLearning==1.8.*; sys_platform == 'win32'",
-    "wasdk-Microsoft.Windows.ApplicationModel.DynamicDependency.Bootstrap==1.8.*; sys_platform == 'win32'",
 ]
 
 [dependency-groups]
@@ -68,15 +55,6 @@ dev = [
 
 [tool.uv]
 package = false
-conflicts = [
-    [
-        { extra = "onnxruntime" },
-        { extra = "onnxruntime-gpu" },
-        { extra = "onnxruntime-qnn" },
-        { extra = "onnxruntime-openvino" },
-        { extra = "onnxruntime-windowsml" },
-    ],
-]
 environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
     "sys_platform == 'win32' and platform_machine == 'AMD64'",
@@ -153,7 +131,7 @@ root = ["video"]
 extra-paths = ["packages/msrtc_rans/python/src"]
 
 [tool.ty.analysis]
-replace-imports-with-any = ["onnxruntime", "onnxruntime.**", "openvino", "openvino.**", "winui3", "winui3.**"]
+replace-imports-with-any = ["onnxruntime", "onnxruntime.**", "openvino", "openvino.**"]
 allowed-unresolved-imports = ["cv2.**", "facer.**", "lpips.**", "skimage.**", "torchvision.**"]
 
 [tool.ty.rules]

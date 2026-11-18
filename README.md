@@ -28,13 +28,9 @@ For deployment, see [libmlvc](https://github.com/microsoft/libmlvc), our open-so
 git clone https://github.com/microsoft/mlvc.git
 cd mlvc
 ```
-4. Install dependencies (choose your ONNX Runtime backend)
+4. Install dependencies
 ```bash
-uv sync --extra onnxruntime              # CPU
-uv sync --extra onnxruntime-gpu          # NVIDIA GPU
-uv sync --extra onnxruntime-qnn          # Qualcomm NPU
-uv sync --extra onnxruntime-openvino     # Intel NPU
-uv sync --extra onnxruntime-windowsml    # Windows ML (GPU or NPU)
+uv sync
 ```
 5. To produce actual bitstreams, you need to install the entropy coder (requires C++ compiler)
 ```bash

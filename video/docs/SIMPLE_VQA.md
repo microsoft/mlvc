@@ -19,11 +19,10 @@ under its [Apache-2.0 license](../src/metrics/simple_vqa/LICENSE.pytorchvideo).
 
 ## Usage
 
-Follow the [main README's installation instructions](../../README.md#installation),
-selecting your ONNX Runtime backend. For example, for NVIDIA GPU:
+Follow the [main README's installation instructions](../../README.md#installation):
 
 ```bash
-uv sync --locked --extra onnxruntime-gpu
+uv sync --locked
 ```
 
 SimpleVQA requires no additional dependency extra. Enable the metric on a

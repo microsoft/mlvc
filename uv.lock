@@ -17,13 +17,6 @@ supported-markers = [
     "platform_machine == 'ARM64' and sys_platform == 'win32'",
     "platform_machine == 'arm64' and sys_platform == 'darwin'",
 ]
-conflicts = [[
-    { package = "mlvc", extra = "onnxruntime" },
-    { package = "mlvc", extra = "onnxruntime-gpu" },
-    { package = "mlvc", extra = "onnxruntime-openvino" },
-    { package = "mlvc", extra = "onnxruntime-qnn" },
-    { package = "mlvc", extra = "onnxruntime-windowsml" },
-]]
 
 [[package]]
 name = "annotated-doc"
@@ -506,7 +499,7 @@ name = "coloredlogs"
 version = "15.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "humanfriendly", marker = "sys_platform == 'win32'" },
+    { name = "humanfriendly" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/c7/eed8f27100517e8c0e6b923d5f0845d0cb99763da6fdee00478f91db7325/coloredlogs-15.0.1.tar.gz", hash = "sha256:7c991aa71a4577af2f82600d8f8f3a89f936baeaf9b50a9c197da014e5bf16b0", size = 278520, upload-time = "2021-06-11T10:22:45.202Z" }
 wheels = [
@@ -527,8 +520,7 @@ name = "contourpy"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/83/5a/a55177dd22553a277388e8a1b3220e92de91bacb28356cdc73caa240121d/contourpy-1.4.0.tar.gz", hash = "sha256:20156f5a1ac4f8ce02656e39a61e82164a3d359796dc8026f75b062783d500e1", size = 13323726, upload-time = "2026-09-11T19:05:05.808Z" }
 wheels = [
@@ -552,8 +544,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "cattrs" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "packaging" },
     { name = "protobuf" },
     { name = "pyaml" },
@@ -946,7 +937,7 @@ name = "humanfriendly"
 version = "10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyreadline3", marker = "sys_platform == 'win32'" },
+    { name = "pyreadline3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/3f/2c29224acb2e2df4d2046e4c73ee2662023c58ff5b113c4c1adac0886c43/humanfriendly-10.0.tar.gz", hash = "sha256:6b0b831ce8f15f7300721aa49829fc4e83921a9a301cc7f606be6686a2288ddc", size = 360702, upload-time = "2021-09-17T21:40:43.31Z" }
 wheels = [
@@ -976,8 +967,7 @@ name = "imageio"
 version = "2.38.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "pillow" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/cd/69e4ac55b6dafdd2b5f32075236841a3945dea7323d0232d80f28c37cea8/imageio-2.38.1.tar.gz", hash = "sha256:6769f1f01c4dd46448307863a787c9a22fa4dbe11c0c88f525c6e410fdfd7983", size = 403667, upload-time = "2026-10-08T14:35:32.961Z" }
@@ -1418,8 +1408,7 @@ name = "lpips"
 version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "scipy" },
     { name = "torch", version = "2.10.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
     { name = "torch", version = "2.10.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "sys_platform == 'win32'" },
@@ -1485,8 +1474,7 @@ dependencies = [
     { name = "cycler" },
     { name = "fonttools" },
     { name = "kiwisolver" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "packaging" },
     { name = "pillow" },
     { name = "pyparsing" },
@@ -1541,8 +1529,7 @@ name = "ml-dtypes"
 version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/12/72/307d7c4bd0600601c7133fba5cb78af7db968152951c1cd473abb1cda782/ml_dtypes-0.6.0.tar.gz", hash = "sha256:5e60251d32ced5598972e4d5e06a2f044341f9291402551a3f6f0ec44f9299b0", size = 3032327, upload-time = "2026-08-13T14:14:40.215Z" }
 wheels = [
@@ -1604,8 +1591,13 @@ dependencies = [
     { name = "mlflow-skinny" },
     { name = "onnx" },
     { name = "onnxconverter-common" },
+    { name = "onnxruntime", marker = "(platform_machine == 'ARM64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "onnxruntime-ep-openvino", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
+    { name = "onnxruntime-gpu", marker = "(platform_machine != 'ARM64' and sys_platform == 'win32') or sys_platform == 'linux'" },
+    { name = "onnxruntime-qnn", marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
     { name = "onnxscript" },
     { name = "opencv-python", marker = "platform_machine != 'ARM64' or sys_platform != 'win32'" },
+    { name = "openvino", marker = "(platform_machine != 'ARM64' and sys_platform == 'win32') or sys_platform == 'linux'" },
     { name = "pandas" },
     { name = "pyfacer", marker = "platform_machine != 'ARM64' or sys_platform != 'win32'" },
     { name = "scipy" },
@@ -1618,27 +1610,6 @@ dependencies = [
     { name = "tqdm" },
     { name = "transformers", marker = "platform_machine != 'ARM64' or sys_platform != 'win32'" },
     { name = "triton-windows", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-]
-
-[package.optional-dependencies]
-onnxruntime = [
-    { name = "onnxruntime" },
-]
-onnxruntime-gpu = [
-    { name = "onnxruntime-gpu", marker = "(platform_machine != 'ARM64' and sys_platform == 'win32') or sys_platform == 'linux'" },
-]
-onnxruntime-openvino = [
-    { name = "onnxruntime-openvino", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-    { name = "openvino", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-]
-onnxruntime-qnn = [
-    { name = "onnxruntime-qnn", marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
-]
-onnxruntime-windowsml = [
-    { name = "wasdk-microsoft-windows-ai-machinelearning", marker = "sys_platform == 'win32'" },
-    { name = "wasdk-microsoft-windows-applicationmodel-dynamicdependency-bootstrap", marker = "sys_platform == 'win32'" },
-    { name = "winrt-windows-applicationmodel", marker = "sys_platform == 'win32'" },
-    { name = "winrt-windows-foundation", marker = "sys_platform == 'win32'" },
 ]
 
 [package.dev-dependencies]
@@ -1674,13 +1645,13 @@ requires-dist = [
     { name = "mlflow-skinny" },
     { name = "onnx" },
     { name = "onnxconverter-common" },
-    { name = "onnxruntime", marker = "extra == 'onnxruntime'" },
-    { name = "onnxruntime-gpu", marker = "(platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'onnxruntime-gpu') or (sys_platform == 'linux' and extra == 'onnxruntime-gpu')" },
-    { name = "onnxruntime-openvino", marker = "platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'onnxruntime-openvino'", specifier = "==1.24.1" },
-    { name = "onnxruntime-qnn", marker = "platform_machine == 'ARM64' and sys_platform == 'win32' and extra == 'onnxruntime-qnn'", specifier = "==1.24.4" },
+    { name = "onnxruntime", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or sys_platform == 'darwin'", specifier = "<1.27" },
+    { name = "onnxruntime-ep-openvino", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
+    { name = "onnxruntime-gpu", marker = "(platform_machine == 'AMD64' or platform_machine == 'x86_64') and sys_platform != 'darwin'", specifier = "<1.27" },
+    { name = "onnxruntime-qnn", marker = "platform_machine == 'ARM64' and sys_platform == 'win32'", specifier = ">=2" },
     { name = "onnxscript" },
     { name = "opencv-python", marker = "platform_machine != 'ARM64' or sys_platform != 'win32'", specifier = "==4.11.0.86" },
-    { name = "openvino", marker = "platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'onnxruntime-openvino'", specifier = "==2025.4.1" },
+    { name = "openvino", marker = "(platform_machine == 'AMD64' or platform_machine == 'x86_64') and sys_platform != 'darwin'" },
     { name = "pandas" },
     { name = "pyfacer", marker = "platform_machine != 'ARM64' or sys_platform != 'win32'" },
     { name = "scipy" },
@@ -1693,12 +1664,7 @@ requires-dist = [
     { name = "tqdm" },
     { name = "transformers", marker = "platform_machine != 'ARM64' or sys_platform != 'win32'", specifier = ">=5.14.1,<6" },
     { name = "triton-windows", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'", specifier = ">=3.6,<3.7" },
-    { name = "wasdk-microsoft-windows-ai-machinelearning", marker = "sys_platform == 'win32' and extra == 'onnxruntime-windowsml'", specifier = "==1.8.*" },
-    { name = "wasdk-microsoft-windows-applicationmodel-dynamicdependency-bootstrap", marker = "sys_platform == 'win32' and extra == 'onnxruntime-windowsml'", specifier = "==1.8.*" },
-    { name = "winrt-windows-applicationmodel", marker = "sys_platform == 'win32' and extra == 'onnxruntime-windowsml'" },
-    { name = "winrt-windows-foundation", marker = "sys_platform == 'win32' and extra == 'onnxruntime-windowsml'" },
 ]
-provides-extras = ["onnxruntime", "onnxruntime-gpu", "onnxruntime-openvino", "onnxruntime-qnn", "onnxruntime-windowsml"]
 
 [package.metadata.requires-dev]
 ci = [
@@ -1876,48 +1842,8 @@ wheels = [
 
 [[package]]
 name = "numpy"
-version = "2.3.5"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_machine == 'AMD64' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and platform_machine == 'AMD64' and sys_platform == 'win32'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/76/65/21b3bc86aac7b8f2862db1e808f1ea22b028e30a225a34a5ede9bf8678f2/numpy-2.3.5.tar.gz", hash = "sha256:784db1dcdab56bf0517743e746dfb0f885fc68d948aba86eeec2cba234bdf1c0", size = 20584950, upload-time = "2025-11-16T22:52:42.067Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c5/65/df0db6c097892c9380851ab9e44b52d4f7ba576b833996e0080181c0c439/numpy-2.3.5-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:ee3888d9ff7c14604052b2ca5535a30216aa0a58e948cdd3eeb8d3415f638769", size = 12259838, upload-time = "2025-11-16T22:49:52.863Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/e1/1ee06e70eb2136797abe847d386e7c0e830b67ad1d43f364dd04fa50d338/numpy-2.3.5-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:612a95a17655e213502f60cfb9bf9408efdc9eb1d5f50535cc6eb365d11b42b5", size = 5088378, upload-time = "2025-11-16T22:49:55.055Z" },
-    { url = "https://files.pythonhosted.org/packages/b6/23/2a1b231b8ff672b4c450dac27164a8b2ca7d9b7144f9c02d2396518352eb/numpy-2.3.5-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0d8163f43acde9a73c2a33605353a4f1bc4798745a8b1d73183b28e5b435ae28", size = 16606086, upload-time = "2025-11-16T22:50:02.127Z" },
-    { url = "https://files.pythonhosted.org/packages/d2/fa/dd48e225c46c819288148d9d060b047fd2a6fb1eb37eae25112ee4cb4453/numpy-2.3.5-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:b46b4ec24f7293f23adcd2d146960559aaf8020213de8ad1909dba6c013bf89c", size = 18542976, upload-time = "2025-11-16T22:50:07.557Z" },
-    { url = "https://files.pythonhosted.org/packages/2d/57/8aeaf160312f7f489dea47ab61e430b5cb051f59a98ae68b7133ce8fa06a/numpy-2.3.5-cp312-cp312-win_amd64.whl", hash = "sha256:86945f2ee6d10cdfd67bcb4069c1662dd711f7e2a4343db5cecec06b87cf31aa", size = 12782922, upload-time = "2025-11-16T22:50:12.811Z" },
-    { url = "https://files.pythonhosted.org/packages/78/a6/aae5cc2ca78c45e64b9ef22f089141d661516856cf7c8a54ba434576900d/numpy-2.3.5-cp312-cp312-win_arm64.whl", hash = "sha256:f28620fe26bee16243be2b7b874da327312240a7cdc38b769a697578d2100013", size = 10194667, upload-time = "2025-11-16T22:50:16.16Z" },
-    { url = "https://files.pythonhosted.org/packages/79/fb/f505c95ceddd7027347b067689db71ca80bd5ecc926f913f1a23e65cf09b/numpy-2.3.5-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:aa5bc7c5d59d831d9773d1170acac7893ce3a5e130540605770ade83280e7188", size = 12254652, upload-time = "2025-11-16T22:50:21.487Z" },
-    { url = "https://files.pythonhosted.org/packages/78/da/8c7738060ca9c31b30e9301ee0cf6c5ffdbf889d9593285a1cead337f9a5/numpy-2.3.5-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:ccc933afd4d20aad3c00bcef049cb40049f7f196e0397f1109dba6fed63267b0", size = 5083172, upload-time = "2025-11-16T22:50:24.562Z" },
-    { url = "https://files.pythonhosted.org/packages/f5/10/ca162f45a102738958dcec8023062dad0cbc17d1ab99d68c4e4a6c45fb2b/numpy-2.3.5-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:11e06aa0af8c0f05104d56450d6093ee639e15f24ecf62d417329d06e522e017", size = 16597430, upload-time = "2025-11-16T22:50:31.56Z" },
-    { url = "https://files.pythonhosted.org/packages/83/68/8236589d4dbb87253d28259d04d9b814ec0ecce7cb1c7fed29729f4c3a78/numpy-2.3.5-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:51c55fe3451421f3a6ef9a9c1439e82101c57a2c9eab9feb196a62b1a10b58ce", size = 18533275, upload-time = "2025-11-16T22:50:37.651Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/88/e2eaa6cffb115b85ed7c7c87775cb8bcf0816816bc98ca8dbfa2ee33fe6e/numpy-2.3.5-cp313-cp313-win_amd64.whl", hash = "sha256:00dc4e846108a382c5869e77c6ed514394bdeb3403461d25a829711041217d5b", size = 12779090, upload-time = "2025-11-16T22:50:42.503Z" },
-    { url = "https://files.pythonhosted.org/packages/8f/88/3f41e13a44ebd4034ee17baa384acac29ba6a4fcc2aca95f6f08ca0447d1/numpy-2.3.5-cp313-cp313-win_arm64.whl", hash = "sha256:0472f11f6ec23a74a906a00b48a4dcf3849209696dff7c189714511268d103ae", size = 10194710, upload-time = "2025-11-16T22:50:44.971Z" },
-    { url = "https://files.pythonhosted.org/packages/71/80/ba9dc6f2a4398e7f42b708a7fdc841bb638d353be255655498edbf9a15a8/numpy-2.3.5-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:5ee6609ac3604fa7780e30a03e5e241a7956f8e2fcfe547d51e3afa5247ac47f", size = 12378897, upload-time = "2025-11-16T22:50:51.327Z" },
-    { url = "https://files.pythonhosted.org/packages/2e/6d/db2151b9f64264bcceccd51741aa39b50150de9b602d98ecfe7e0c4bff39/numpy-2.3.5-cp313-cp313t-macosx_14_0_arm64.whl", hash = "sha256:86d835afea1eaa143012a2d7a3f45a3adce2d7adc8b4961f0b362214d800846a", size = 5207391, upload-time = "2025-11-16T22:50:54.542Z" },
-    { url = "https://files.pythonhosted.org/packages/a5/87/6831980559434973bebc30cd9c1f21e541a0f2b0c280d43d3afd909b66d0/numpy-2.3.5-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ce581db493ea1a96c0556360ede6607496e8bf9b3a8efa66e06477267bc831e9", size = 16657359, upload-time = "2025-11-16T22:51:01.991Z" },
-    { url = "https://files.pythonhosted.org/packages/74/a6/54da03253afcbe7a72785ec4da9c69fb7a17710141ff9ac5fcb2e32dbe64/numpy-2.3.5-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:9ee2197ef8c4f0dfe405d835f3b6a14f5fee7782b5de51ba06fb65fc9b36e9f1", size = 18594587, upload-time = "2025-11-16T22:51:08.585Z" },
-    { url = "https://files.pythonhosted.org/packages/d5/81/50613fec9d4de5480de18d4f8ef59ad7e344d497edbef3cfd80f24f98461/numpy-2.3.5-cp313-cp313t-win_amd64.whl", hash = "sha256:b501b5fa195cc9e24fe102f21ec0a44dffc231d2af79950b451e0d99cea02234", size = 12920341, upload-time = "2025-11-16T22:51:14.312Z" },
-    { url = "https://files.pythonhosted.org/packages/bb/ab/08fd63b9a74303947f34f0bd7c5903b9c5532c2d287bead5bdf4c556c486/numpy-2.3.5-cp313-cp313t-win_arm64.whl", hash = "sha256:a80afd79f45f3c4a7d341f13acbe058d1ca8ac017c165d3fa0d3de6bc1a079d7", size = 10262507, upload-time = "2025-11-16T22:51:16.846Z" },
-]
-
-[[package]]
-name = "numpy"
 version = "2.5.4"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-    "python_full_version >= '3.13' and platform_machine == 'AMD64' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 'ARM64' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-    "python_full_version < '3.13' and platform_machine == 'AMD64' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and platform_machine == 'ARM64' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
-]
 sdist = { url = "https://files.pythonhosted.org/packages/95/b0/c7453d0b6e2073c3264468b106ee1563750cecc910965e67357e3698c83e/numpy-2.5.4.tar.gz", hash = "sha256:9a94cf751c9ad8ebaa835bcd3d40dacf8534ad086b88c38029b65123c7999d2a", size = 20866315, upload-time = "2026-10-10T20:05:31.422Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ff/a9/bac826765e971d8e16e2064e9ac7525fd69b40ac17c905033a7f5442023f/numpy-2.5.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:b11e8fda06a7d69f15ebf542660b74466c2e51094800c1fb794f47ad4faeef17", size = 12015718, upload-time = "2026-10-10T20:02:43.45Z" },
@@ -2083,8 +2009,7 @@ version = "1.23.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ml-dtypes" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "protobuf" },
     { name = "typing-extensions" },
 ]
@@ -2103,8 +2028,7 @@ version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ml-dtypes" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "onnx" },
     { name = "packaging" },
     { name = "sympy" },
@@ -2120,8 +2044,7 @@ name = "onnxconverter-common"
 version = "1.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "onnx" },
     { name = "packaging" },
     { name = "protobuf" },
@@ -2132,97 +2055,67 @@ wheels = [
 
 [[package]]
 name = "onnxruntime"
-version = "1.31.1"
+version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flatbuffers" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy" },
     { name = "packaging" },
     { name = "protobuf" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0e/f7/cecc0efeeea83bff2f7789ae1b80f27fa0f0210d6d9d66d1f0031a6b5e47/onnxruntime-1.31.1-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:96dd2564b10ea7153ad9c207e7cd8e5917cb3ba521e0e0a62ac03486fdc8d56c", size = 20882125, upload-time = "2026-10-26T19:26:16.256Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/27/c6a823bac55b2977bea2027c3ec9393a2c1002cb9a09eb40354563e02730/onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:1f3dea47f2f0e5117c2404cea7d21fd253ae7836a3bf167a501cdfbb2600d536", size = 23760988, upload-time = "2026-10-26T19:26:23.153Z" },
-    { url = "https://files.pythonhosted.org/packages/45/b2/793b4051d8dc6acb379ead9b72050f0ffa283ca49a6904add2e218b83e2e/onnxruntime-1.31.1-cp312-cp312-win_amd64.whl", hash = "sha256:ae8a9a351efda685cc59a66226cdefaa37a126c1d66872ca23a2de9425326130", size = 14888466, upload-time = "2026-10-26T19:26:25.816Z" },
-    { url = "https://files.pythonhosted.org/packages/ed/72/09d635ab4b6137d8ac63d4911a37dad8b1ef15a77d20b65d7ed40fdca012/onnxruntime-1.31.1-cp312-cp312-win_arm64.whl", hash = "sha256:fe8b9ac1ae8e894e12c47ee82e4f6dfc1835768133687257866469fda80d0bf1", size = 14740724, upload-time = "2026-10-26T19:26:28.682Z" },
-    { url = "https://files.pythonhosted.org/packages/b2/93/d2b855793302ef57d55cc0583b72a00a8dcb01d9bdb3adac380f09b050e8/onnxruntime-1.31.1-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:e4ad067d36e2220218e085d7223283b2ee1bc73d887e811fd14d21cf901a11ee", size = 20881825, upload-time = "2026-10-26T19:26:31.51Z" },
-    { url = "https://files.pythonhosted.org/packages/fc/0a/c887bcb84a9455b2723825381a77af38611a80f996f804e20fde5f671b63/onnxruntime-1.31.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:74a6a52994616c4d18b33db1e13c226333a70a6ba07480a5cab9c2a50dff1430", size = 23760717, upload-time = "2026-10-26T19:26:37.721Z" },
-    { url = "https://files.pythonhosted.org/packages/59/bf/a1d282b4c753ba3e9b31f4c11abd2bc2390513dc5e3792ca3b78e42401c3/onnxruntime-1.31.1-cp313-cp313-win_amd64.whl", hash = "sha256:0558f29d5f6ac09957390c9c5495931485ee8ae7f0ce781ccee86a0ae5c2348b", size = 14888304, upload-time = "2026-10-26T19:26:41.032Z" },
-    { url = "https://files.pythonhosted.org/packages/7e/fd/529135287474dbaf19d9362ccda61998128ab18507f78bc82931e1bbaf22/onnxruntime-1.31.1-cp313-cp313-win_arm64.whl", hash = "sha256:075147c2e2430b4b29c436bffa78537b902a6ed58ed66f99ae3c6795e2081cb5", size = 14740772, upload-time = "2026-10-26T19:26:44.042Z" },
-    { url = "https://files.pythonhosted.org/packages/05/10/e37d9f06dae61cecaad344aef213a19643b66761a06667bdfe5282c1fb37/onnxruntime-1.31.1-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:6711108bcddf8b401145fb31ac93776b8ca6e7e7e56acdfa9d478575b8df9a2f", size = 23773876, upload-time = "2026-10-26T19:26:50.371Z" },
+    { url = "https://files.pythonhosted.org/packages/81/b1/d111b1df656761f980d9e298a60039a9cb66036b1d039e777537743d0ac3/onnxruntime-1.26.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:05b028781b322ad74b57ce5b50aa5280bb1fe96ceec334628ade681e0b24c1ac", size = 18016624, upload-time = "2026-05-12T00:41:01.735Z" },
+    { url = "https://files.pythonhosted.org/packages/44/fc/026d0a7162b9c2153dac292baea9e027c42304dc1d9dc6f8ff5b4cfbaedd/onnxruntime-1.26.0-cp312-cp312-win_amd64.whl", hash = "sha256:a26374dc7fbcaae593601086b242120e13f2310558df0991da6dd8b8fac00414", size = 13026427, upload-time = "2026-05-08T19:08:03.503Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/27/1dcf88e45e4c69db5f7b106f2dacc3801ba98994e082ca03e1dfdf7bfe57/onnxruntime-1.26.0-cp312-cp312-win_arm64.whl", hash = "sha256:54a8053410fd31fd66469bd754fcfe8a4df9f7eb44756b4b5479bf50c842d948", size = 12796647, upload-time = "2026-05-08T19:07:52.108Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/a2/c801242685e0ce48a4ca51dfafbb588765e0446397e123be53ba5598f3f5/onnxruntime-1.26.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:ccce19c5f771b8268902f77d9fed9e88f9499465d6780808faa6611a789d33f0", size = 18016563, upload-time = "2026-05-08T19:07:28.081Z" },
+    { url = "https://files.pythonhosted.org/packages/77/89/3e52249aa08fa301e217ecba07b5246a8338fa2b401e109326e3fc5be0f9/onnxruntime-1.26.0-cp313-cp313-win_amd64.whl", hash = "sha256:61bec80655efa460591c2bc655392d57d2650ce85533a6b9b3b7a790d7ea7916", size = 13026751, upload-time = "2026-05-08T19:08:06.2Z" },
+    { url = "https://files.pythonhosted.org/packages/06/b3/c1c8782b14af6797c303de132d6eef26a9fb80dfacd3750ce57911d11c6b/onnxruntime-1.26.0-cp313-cp313-win_arm64.whl", hash = "sha256:a6677545ff451e3539a02746d2f207d8c5baa4a0a818886bb9d6a6eb9511ee89", size = 12796807, upload-time = "2026-05-08T19:07:54.879Z" },
+]
+
+[[package]]
+name = "onnxruntime-ep-openvino"
+version = "1.8.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/75/98/224ead07344390258ae0515ed285ba2951e9c1405f4507443a03bb7dd5c7/onnxruntime_ep_openvino-1.8.1-py3-none-win_amd64.whl", hash = "sha256:1acd878be173b02bb8b953460f2f59b121e5f6e47ebc6aad490c0590cf6718fb", size = 75824318, upload-time = "2026-10-26T05:00:51.017Z" },
 ]
 
 [[package]]
 name = "onnxruntime-gpu"
-version = "1.32.0"
+version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "flatbuffers", marker = "(platform_machine != 'ARM64' and sys_platform == 'win32') or sys_platform == 'linux'" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32') or sys_platform == 'linux'" },
-    { name = "packaging", marker = "(platform_machine != 'ARM64' and sys_platform == 'win32') or sys_platform == 'linux'" },
-    { name = "protobuf", marker = "(platform_machine != 'ARM64' and sys_platform == 'win32') or sys_platform == 'linux'" },
+    { name = "flatbuffers" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "protobuf" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ce/8b/c48e90baf9b9389c4c709dae202938e03a01c7ffc792888bafcf60e9a6b6/onnxruntime_gpu-1.32.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:09637f3e38a1addc308dec5ef825a36eeb786e9615f45ec76aa29909df5cdd36", size = 251396935, upload-time = "2026-11-13T10:44:22.067Z" },
-    { url = "https://files.pythonhosted.org/packages/ee/3b/6ce3c2548db5f8f3e639373640fa7f7fcdbcbce7b754971c0b293ab105b5/onnxruntime_gpu-1.32.0-cp312-cp312-win_amd64.whl", hash = "sha256:d8bc5d7668872889d605c1e7253581e021db7dea41a142ad2ab78d6d96f3f289", size = 157765830, upload-time = "2026-11-13T10:08:52.526Z" },
-    { url = "https://files.pythonhosted.org/packages/a9/b6/759cc7838e5640d30e365e3b8466987172526faabf1779f0bf776f566b1e/onnxruntime_gpu-1.32.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:d3cec70e7a7dcfb085e0e6458210211541a33ffbf89c6a6e4e3d6adf7262cd6d", size = 251389345, upload-time = "2026-11-13T10:44:31.448Z" },
-    { url = "https://files.pythonhosted.org/packages/36/6e/1e44789fd69794182cf522455ad39b430794e048e97dd72f423406b1e633/onnxruntime_gpu-1.32.0-cp313-cp313-win_amd64.whl", hash = "sha256:9e7b6b5772c5cd99be9c47dace5f0b2faf4608f6ab638cdc0bccc096405baaee", size = 157777759, upload-time = "2026-11-13T10:08:59.686Z" },
-    { url = "https://files.pythonhosted.org/packages/52/49/85757d6bfe0ba4e5e44fbf8b03151d5260a8367197f549fb5976a3367001/onnxruntime_gpu-1.32.0-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:bc57d0d375b5b6059fa231ba4df1d7167b6ce6a314cfc27fe80533dc7d45d3cb", size = 251406455, upload-time = "2026-11-13T10:44:41.968Z" },
-]
-
-[[package]]
-name = "onnxruntime-openvino"
-version = "1.24.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "flatbuffers", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-    { name = "packaging", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-    { name = "protobuf", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-    { name = "sympy", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/cf/17ba72de2df0fcba349937d2788f154397bbc2d1a2d67772a97e26f6bc5f/onnxruntime_openvino-1.24.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:d617fac2f59a6ab5ea59a788c3e1592240a129642519aaeaa774761dfe35150e", size = 84433207, upload-time = "2026-02-26T13:44:41.395Z" },
-    { url = "https://files.pythonhosted.org/packages/59/37/d301f2c68b19a9485ed5db3047e0fb52478f3e73eb08c7d2a7c61be7cc1c/onnxruntime_openvino-1.24.1-cp312-cp312-win_amd64.whl", hash = "sha256:f186335a9c9b255633275290da7521d3d4d14c7773fee3127bfa040234d3fa5a", size = 13658075, upload-time = "2026-02-26T13:44:44.905Z" },
-    { url = "https://files.pythonhosted.org/packages/08/07/f225999919f56506b603aaa3ff837ad563ab26f86906ed7fa7e5abcd849e/onnxruntime_openvino-1.24.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:2c3bb73e68ac27f4891af8a595c1faf574ec68b772e6583c90a0b997a1822782", size = 84433183, upload-time = "2026-02-26T13:44:50.254Z" },
-    { url = "https://files.pythonhosted.org/packages/3e/92/46ae2cd565961a89189900f385bb2f13a9fa731ea4674001d23720fbb1e0/onnxruntime_openvino-1.24.1-cp313-cp313-win_amd64.whl", hash = "sha256:434bf49aa71393c577a456c9d76c98e6d6958a833fa0876793e3d5437b5a511a", size = 13658485, upload-time = "2026-02-26T13:44:53.889Z" },
+    { url = "https://files.pythonhosted.org/packages/94/fd/59bee7cffaa435da44fefdeb63e29c61de4dbfa4b279852f59cd02c042ae/onnxruntime_gpu-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3c01119ed4d9449d60367fa8ccffcd02bd3fe736754284e4b198d131f54edad6", size = 276971796, upload-time = "2026-05-08T19:15:46.192Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/e4/9b378a5466ea0bed65e5beb8e09254973c580a6522810a38afbcc45e5105/onnxruntime_gpu-1.26.0-cp312-cp312-win_amd64.whl", hash = "sha256:5f49c44689894650990e4c8a857d2edafc276fbd79bba57ceb224bd18d25d491", size = 226548963, upload-time = "2026-05-08T19:09:34.925Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/97/fe8979f44b9275654b42f7bb556e30789b71a1b22998c83b540df2b1b774/onnxruntime_gpu-1.26.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:cfda2fad535595bfc3e570eb588092717711dcb2957656d814695e0c9ceb1508", size = 276974871, upload-time = "2026-05-08T19:15:58.052Z" },
+    { url = "https://files.pythonhosted.org/packages/67/3f/59f1777a394625ecc9a85636de57dc47c25dbb5f888da050f1463955a0ce/onnxruntime_gpu-1.26.0-cp313-cp313-win_amd64.whl", hash = "sha256:6ab9f9c741d2e239b2e321ab0d389c04329d4ab7f11e3b92dd3aa7db1c59dee4", size = 226548083, upload-time = "2026-05-08T19:09:44.408Z" },
+    { url = "https://files.pythonhosted.org/packages/89/96/360328e3c463f7ea08e853c4239c397e83363dd0204de71a710dc1a544bd/onnxruntime_gpu-1.26.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:bcf6f347cad9f88a9a625c2b352cf9de927528aedb627ebbc089a201f1990b94", size = 276992052, upload-time = "2026-05-08T19:16:09.892Z" },
 ]
 
 [[package]]
 name = "onnxruntime-qnn"
-version = "1.24.4"
+version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "flatbuffers", marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
-    { name = "packaging", marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
-    { name = "protobuf", marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
-    { name = "sympy", marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
+    { name = "coloredlogs" },
+    { name = "flatbuffers" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "packaging" },
+    { name = "protobuf" },
+    { name = "sympy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/45/65/d4c5b9dc828a7aa24382d186bc7a1067c9b6a44773fb39d7ce0f24dbdf01/onnxruntime_qnn-1.24.4-cp312-cp312-win_amd64.whl", hash = "sha256:944461b25c08a03599df43cd4be45ff3858559ea254506c52f426afab9304554", size = 103049336, upload-time = "2026-03-17T22:05:08.205Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/06/6cccfb87d83f892c1a94d5055ff863ff87d08ae0638bd536408dc85f5177/onnxruntime_qnn-1.24.4-cp312-cp312-win_arm64.whl", hash = "sha256:3b6031669b86d9af1e432d15c2c587dcaa7e147fe0e923b382a05b50a7246542", size = 64637930, upload-time = "2026-03-17T22:04:13.636Z" },
-    { url = "https://files.pythonhosted.org/packages/fc/43/d1e7cb19ee194399f4b8e46e5b7ec6fe87b8d1a893a9f18428b5ee28995c/onnxruntime_qnn-1.24.4-cp313-cp313-win_amd64.whl", hash = "sha256:bdf8f099b515aa03535fd3d97ab95684111adb1bf64075b66e518b1568fd7a60", size = 103049506, upload-time = "2026-03-17T22:05:16.885Z" },
-    { url = "https://files.pythonhosted.org/packages/f8/6a/56f258284927b3a635bb5d0a6f23daeb3ec927d9a9f49dbc0d7a4d2a9025/onnxruntime_qnn-1.24.4-cp313-cp313-win_arm64.whl", hash = "sha256:7fe9d0d9c54faf8068619a13946b61acb832aaac2f6b692c5fdd770300b3e2b8", size = 64638039, upload-time = "2026-03-17T22:04:24.466Z" },
-]
-
-[[package]]
-name = "onnxruntime-windowsml"
-version = "1.23.5.202603312053"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "coloredlogs", marker = "sys_platform == 'win32'" },
-    { name = "flatbuffers", marker = "sys_platform == 'win32'" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
-    { name = "packaging", marker = "sys_platform == 'win32'" },
-    { name = "protobuf", marker = "sys_platform == 'win32'" },
-    { name = "sympy", marker = "sys_platform == 'win32'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/79/1c170d0bf055105af8c9b9e9453f8bac1a164eca4dd0045e82f576d0423f/onnxruntime_windowsml-1.23.5.202603312053-cp312-cp312-win_amd64.whl", hash = "sha256:ebe722e512c006d0a83acb7998e416863567c6073a851cfe63b6ec88eb4a7adc", size = 25744959, upload-time = "2026-04-22T21:54:54.856Z" },
-    { url = "https://files.pythonhosted.org/packages/38/cc/ffc8c649d9d9851b383d34227a1249782c312cb783751db7dae0f9b0daed/onnxruntime_windowsml-1.23.5.202603312053-cp312-cp312-win_arm64.whl", hash = "sha256:2f455af9a60f2d916e43374a66f4da974bd531f607391d715b1de1c77b5a9412", size = 25095937, upload-time = "2026-04-22T21:54:58.024Z" },
-    { url = "https://files.pythonhosted.org/packages/d8/91/cd11a4100e1ff39c811520182988b5990aea6501ae3e2e57964a08e53515/onnxruntime_windowsml-1.23.5.202603312053-cp313-cp313-win_amd64.whl", hash = "sha256:1c55888c342ef12eabc35cdc14e663b3d9d364a4e3d65f315d8ba70619d951cf", size = 25745380, upload-time = "2026-04-22T21:55:00.9Z" },
-    { url = "https://files.pythonhosted.org/packages/4f/a0/8feb945ed40dc1b7fcb967edeaa0173163e822f06347aa23db69273e9fba/onnxruntime_windowsml-1.23.5.202603312053-cp313-cp313-win_arm64.whl", hash = "sha256:bfd5b951ad7ff56c1815971aeb2d6f90bc363e7bf4e3280d47eaffc32b3fd5e9", size = 25096016, upload-time = "2026-04-22T21:55:03.694Z" },
+    { url = "https://files.pythonhosted.org/packages/96/4b/9477b8024ae2d4842bac106e7422fc41fee2979a43ead63d658d2f062b41/onnxruntime_qnn-2.7.0-cp312-cp312-win_amd64.whl", hash = "sha256:83e0f18fc0233b911a78536da4d089eb66086a9d843f6046cf7a88daa4c1432c", size = 198606623, upload-time = "2026-10-13T20:21:14.813Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/69/18bc5cbd95d09e72e806b1288b3032913ead327653db96ed3e4ce9de4b5f/onnxruntime_qnn-2.7.0-cp312-cp312-win_arm64.whl", hash = "sha256:04dff4e75d4046a29fd8d90602c0cb3d130bb3c82c58e280c600c6c234a11c84", size = 62290853, upload-time = "2026-10-13T20:21:07.537Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/ed/b69193f996ef6fed91b864bac135a4f62a242136551137ae1b08341bedf9/onnxruntime_qnn-2.7.0-cp313-cp313-win_amd64.whl", hash = "sha256:4d9e6716f9c4d054bba1165a7ceee58c380c933a2445482d3466efb3eb18c3b0", size = 195657644, upload-time = "2026-10-13T20:21:49.904Z" },
+    { url = "https://files.pythonhosted.org/packages/88/74/97e08eba0a2ac3704840a25f3a74a0c000902e1c57713d188c84651faf9f/onnxruntime_qnn-2.7.0-cp313-cp313-win_arm64.whl", hash = "sha256:da52c20c0934b2e35b7197ce17333687296da0f11f1f9a60e39858d5a662ea8e", size = 62290896, upload-time = "2026-10-13T20:20:55.255Z" },
 ]
 
 [[package]]
@@ -2231,8 +2124,7 @@ version = "0.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ml-dtypes" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "onnx" },
     { name = "onnx-ir" },
     { name = "packaging" },
@@ -2248,8 +2140,7 @@ name = "opencv-python"
 version = "4.11.0.86"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/17/06/68c27a523103dad5837dc5b87e71285280c4f098c60e4fe8a8db6486ab09/opencv-python-4.11.0.86.tar.gz", hash = "sha256:03d60ccae62304860d232272e4a4fda93c39d595780cb40b161b310244b736a4", size = 95171956, upload-time = "2025-01-16T13:52:24.737Z" }
 wheels = [
@@ -2533,20 +2424,17 @@ wheels = [
 
 [[package]]
 name = "openvino"
-version = "2025.4.1"
+version = "2026.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-    { name = "openvino-telemetry", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
-    { name = "packaging", marker = "platform_machine != 'ARM64' and sys_platform == 'win32'" },
+    { name = "numpy" },
+    { name = "openvino-telemetry" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/79/57b35b05875e9155d8802815ad2c93bdc46e7c8883ce53109b7ba95f9d8d/openvino-2025.4.1-20426-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:8d082e73af653a40b97efaa8219adf62c60f32060b9929ebcb60d7f14e79e4f1", size = 32880775, upload-time = "2025-12-17T16:18:10.792Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/91/807f4e288969bc696dee2e56d7269abffb56626249642effb8ec2ab7d424/openvino-2025.4.1-20426-cp312-cp312-manylinux2014_x86_64.whl", hash = "sha256:88f074286d420c1a1a95e7f2ba11109a899f2f3b3fd818cfe1e47ead22cc7e45", size = 50278348, upload-time = "2025-12-17T16:18:13.894Z" },
-    { url = "https://files.pythonhosted.org/packages/64/c2/582bd6d01fc6588bfe35c0f363d294a54daa4587cafe30e932fa51420d04/openvino-2025.4.1-20426-cp312-cp312-win_amd64.whl", hash = "sha256:c50293d1463698012eaa526dcc83f841b85a3f4952eea4c9445c83e0346f8e80", size = 41791284, upload-time = "2025-12-17T16:18:19.673Z" },
-    { url = "https://files.pythonhosted.org/packages/a4/b9/2a53eb9f0e9854a9be5f7cd4938c60a8cc7c5683f0fc08aa6ff7c87f5221/openvino-2025.4.1-20426-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:5dd7947a63c89a4b7133a0cecb7b641f05e5ba22133b99241542884ab59117ef", size = 32880891, upload-time = "2025-12-17T16:18:25.159Z" },
-    { url = "https://files.pythonhosted.org/packages/d7/76/099c34ac7563a350325efe6dbc91b5cc20f0aa2331a6e036f2da262bab57/openvino-2025.4.1-20426-cp313-cp313-manylinux2014_x86_64.whl", hash = "sha256:68f8d6cfd74c7a74d68a62c8156830ddaa5b9f1f782d3643def83f659c0a6671", size = 50280569, upload-time = "2025-12-17T16:18:28.621Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/e5/da52a86cc5f1c86871002712429cdcca0c0dbff12dfbce730b05db60340b/openvino-2025.4.1-20426-cp313-cp313-win_amd64.whl", hash = "sha256:a28eef35e3ed497c3238eb8f3d1ee90647c449707a8b0a7630758cd15555d8dd", size = 41791079, upload-time = "2025-12-17T16:18:34.307Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/3a/2a173ac1ad749ff0b041788eefc1ade0d410231fedfc43f77474f3b806cc/openvino-2026.4.1-22982-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:6b4375c17ddcac83a5180349e2e2bb811185c261066e2a920659892d58ef0e3b", size = 59144434, upload-time = "2026-10-01T09:58:51.34Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/44/66a61b7cfccea1dfa20e95a04b4157f07a0e4dc3f7e894b22a92abb8822b/openvino-2026.4.1-22982-cp312-cp312-win_amd64.whl", hash = "sha256:4e04316abff1b99e29b8cbd38deaef9bde4739eba216d982d4b3981e456ecd87", size = 84964415, upload-time = "2026-10-01T09:58:59.18Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/8b/d2fb2611cd8160cb4c0e5401b9d87312961d77891eade431381e396a8d83/openvino-2026.4.1-22982-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:a9b637846c579d7b81b17b6585e0c7b1947574e8d13cf83d7307ce50cd2c352e", size = 59142703, upload-time = "2026-10-01T09:59:06.972Z" },
+    { url = "https://files.pythonhosted.org/packages/35/e2/917952cd8d21351d10bf0ce694421de92a2b14a6269f0ba13d2504fcf6a9/openvino-2026.4.1-22982-cp313-cp313-win_amd64.whl", hash = "sha256:37c270c99d6de23439965e97cb5106389d3c8985f3b8bb90909a6ea0270db3f2", size = 84964362, upload-time = "2026-10-01T09:59:15.467Z" },
 ]
 
 [[package]]
@@ -2572,8 +2460,7 @@ name = "pandas"
 version = "3.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "python-dateutil" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
@@ -2861,8 +2748,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipywidgets" },
     { name = "matplotlib" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "opencv-python" },
     { name = "pillow" },
     { name = "requests" },
@@ -3204,8 +3090,7 @@ dependencies = [
     { name = "imageio" },
     { name = "lazy-loader" },
     { name = "networkx" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "packaging" },
     { name = "pillow" },
     { name = "scipy" },
@@ -3232,8 +3117,7 @@ name = "scipy"
 version = "1.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'ARM64' and sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' or sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7e/74/66de6258867beb2ef08f35f9f2ac017a52cacd5081714d239ff1a442d458/scipy-1.18.1.tar.gz", hash = "sha256:52c4b7422442aba924d03ad4019852b08a92e64ea187b933135687bfe2747307", size = 30781235, upload-time = "2026-08-21T23:28:50.599Z" }
 wheels = [
@@ -3407,8 +3291,7 @@ name = "tifffile"
 version = "2026.10.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fd/87/a982ca5b892579397c2b155275cc0119b51feb1701eaefa18acb0245f0a4/tifffile-2026.10.15.tar.gz", hash = "sha256:a5ee666dbd6d62e059830a3450825a2521a981b3f45c07a80ab009484aef56f0", size = 454150, upload-time = "2026-10-16T00:32:10.511Z" }
 wheels = [
@@ -3571,8 +3454,7 @@ name = "torchvision"
 version = "0.25.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "pillow" },
     { name = "torch", version = "2.10.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
     { name = "torch", version = "2.10.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "sys_platform == 'win32'" },
@@ -3629,8 +3511,7 @@ version = "5.22.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'win32' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-gpu') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-openvino') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-gpu' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-qnn') or (extra == 'extra-4-mlvc-onnxruntime-openvino' and extra == 'extra-4-mlvc-onnxruntime-windowsml') or (extra == 'extra-4-mlvc-onnxruntime-qnn' and extra == 'extra-4-mlvc-onnxruntime-windowsml')" },
-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32' or extra == 'extra-4-mlvc-onnxruntime' or extra == 'extra-4-mlvc-onnxruntime-gpu' or extra != 'extra-4-mlvc-onnxruntime-openvino' or extra == 'extra-4-mlvc-onnxruntime-qnn' or extra == 'extra-4-mlvc-onnxruntime-windowsml'" },
+    { name = "numpy" },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "regex" },
@@ -3800,32 +3681,6 @@ wheels = [
 ]
 
 [[package]]
-name = "wasdk-microsoft-windows-ai-machinelearning"
-version = "1.8.260508005"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "onnxruntime-windowsml", marker = "sys_platform == 'win32'" },
-    { name = "winrt-runtime", marker = "sys_platform == 'win32'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/8e/70e1c370c9eddac79d958704c5b1f56a0849aa069b52243870b0265d6d4e/wasdk_microsoft_windows_ai_machinelearning-1.8.260508005-cp312-cp312-win_amd64.whl", hash = "sha256:40114b1326ee9d11f74375fc5f9b3cf19839dcbfdb71e6e25011283b7c1e81ad", size = 91044, upload-time = "2026-05-14T15:20:24.107Z" },
-    { url = "https://files.pythonhosted.org/packages/97/38/3bb4850dc4ffef187e961b63206395d6963bfa7954855ef5a59ab4467dbc/wasdk_microsoft_windows_ai_machinelearning-1.8.260508005-cp312-cp312-win_arm64.whl", hash = "sha256:d1200b6cdcf1fbf076bd767fe2d1cdb4db719a4aaa99bcd202f7615bd180850a", size = 90301, upload-time = "2026-05-14T15:20:25.116Z" },
-    { url = "https://files.pythonhosted.org/packages/52/cf/f3a0f6c0888a7fb831ecfab5a431d8376cc9e941d7cd75bb7fa31f5d3b2c/wasdk_microsoft_windows_ai_machinelearning-1.8.260508005-cp313-cp313-win_amd64.whl", hash = "sha256:84734daef3fe746227309824d27cd283eee170f375118e03d17275c2487e0134", size = 91066, upload-time = "2026-05-14T15:20:26.394Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/81/1ebfcd868c1466281eda3704f73c220b70e3465dbf5ddfbfde05acd1c697/wasdk_microsoft_windows_ai_machinelearning-1.8.260508005-cp313-cp313-win_arm64.whl", hash = "sha256:a15c5724cec5949e628807b30c3cd3c19116cbf302b0a1a2f710ac04e3368ce6", size = 90309, upload-time = "2026-05-14T15:20:27.434Z" },
-]
-
-[[package]]
-name = "wasdk-microsoft-windows-applicationmodel-dynamicdependency-bootstrap"
-version = "1.8.260508005"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/0a/e70e65799bc14427bf22f2d335699c9649f83e5962734dc2df871b86faa1/wasdk_microsoft_windows_applicationmodel_dynamicdependency_bootstrap-1.8.260508005-cp312-cp312-win_amd64.whl", hash = "sha256:2283384e8edcd42f1e394eb5dd826aec893bd224e85885dd82924e437dda28fb", size = 194430, upload-time = "2026-05-14T15:20:36.041Z" },
-    { url = "https://files.pythonhosted.org/packages/b4/e8/deb82bb28e27bd7eb0e915feb5554b164bc560015397a52179c55207faeb/wasdk_microsoft_windows_applicationmodel_dynamicdependency_bootstrap-1.8.260508005-cp312-cp312-win_arm64.whl", hash = "sha256:736b7f23ad584585204e999a8b19d27e23b3acc40e0aa66cea0a9a7ad14169d3", size = 183900, upload-time = "2026-05-14T15:20:37.548Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/20/8875c304fe6d343fc512c063eedcfca6e8b51973670464e1fdcacb1f2341/wasdk_microsoft_windows_applicationmodel_dynamicdependency_bootstrap-1.8.260508005-cp313-cp313-win_amd64.whl", hash = "sha256:3a290f012bb64e2dcd06be9ab28864a36a452a9e0d072fdc876eebd4f91835fb", size = 194432, upload-time = "2026-05-14T15:20:38.888Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/70/56863614832d8c29c9d6debb0304d7c6a7b75502c353bed202dbad47f9c2/wasdk_microsoft_windows_applicationmodel_dynamicdependency_bootstrap-1.8.260508005-cp313-cp313-win_arm64.whl", hash = "sha256:805aab42b4382f459f38286fb935eb5d088f3d4f4b5cf8aa4f11504c928420b8", size = 183903, upload-time = "2026-05-14T15:20:39.959Z" },
-]
-
-[[package]]
 name = "wcwidth"
 version = "0.9.4"
 source = { registry = "https://pypi.org/simple" }
@@ -3873,51 +3728,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bf/60/bc7a980fc78837d6ef8f5940cca4cadc433364503a4c4d42e2a7a0de3231/widgetsnbextension-4.0.16.tar.gz", hash = "sha256:adeea0ae78f0856ee4945f413299801b82a0a01416303301f39a704282a37b73", size = 1111094, upload-time = "2026-08-18T08:52:55.859Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/34/95/40e17e20046b7bc820d29d09ae84ec157ec8dd6e6f6cd722626292c31b2e/widgetsnbextension-4.0.16-py3-none-any.whl", hash = "sha256:a31a8774885b96fe825462f5d6496166f0c7cae111195b6465c801d230eb5a4e", size = 2225148, upload-time = "2026-08-18T08:52:53.736Z" },
-]
-
-[[package]]
-name = "winrt-runtime"
-version = "3.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typing-extensions", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/16/dd/acdd527c1d890c8f852cc2af644aa6c160974e66631289420aa871b05e65/winrt_runtime-3.2.1.tar.gz", hash = "sha256:c8dca19e12b234ae6c3dadf1a4d0761b51e708457492c13beb666556958801ea", size = 21721, upload-time = "2025-06-06T14:40:27.593Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/a1/1d7248d5c62ccbea5f3e0da64ca4529ce99c639c3be2485b6ed709f5c740/winrt_runtime-3.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:06510db215d4f0dc45c00fbb1251c6544e91742a0ad928011db33b30677e1576", size = 241391, upload-time = "2025-06-06T06:44:09.442Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/ae/6a205d8dafc79f7c242be7f940b1e0c1971fd64ab3079bda4b514aa3d714/winrt_runtime-3.2.1-cp312-cp312-win_arm64.whl", hash = "sha256:14562c29a087ccad38e379e585fef333e5c94166c807bdde67b508a6261aa195", size = 415242, upload-time = "2025-06-06T06:44:10.407Z" },
-    { url = "https://files.pythonhosted.org/packages/aa/24/2b6e536ca7745d788dfd17a2ec376fa03a8c7116dc638bb39b035635484f/winrt_runtime-3.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:3c1fdcaeedeb2920dc3b9039db64089a6093cad2be56a3e64acc938849245a6d", size = 241349, upload-time = "2025-06-06T06:44:12.661Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/7f/6d72973279e2929b2a71ed94198ad4a5d63ee2936e91a11860bf7b431410/winrt_runtime-3.2.1-cp313-cp313-win_arm64.whl", hash = "sha256:28f3dab083412625ff4d2b46e81246932e6bebddf67bea7f05e01712f54e6159", size = 415126, upload-time = "2025-06-06T06:44:13.702Z" },
-]
-
-[[package]]
-name = "winrt-windows-applicationmodel"
-version = "3.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "winrt-runtime", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a4/a6/86bb35f1aa1295d59b7fac47ce41eeaaa217b19e31c5f55e264df07fd3fe/winrt_windows_applicationmodel-3.2.1.tar.gz", hash = "sha256:085cd61caaf0c6bbb54b28f791568be3c16c172f690a311d00e21a97cf4579f4", size = 30487, upload-time = "2025-06-06T14:40:34.848Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/27/4f937ba0f35f216c7c8e148703b3352cf5808fcd2b292aa953b6fc604a5e/winrt_windows_applicationmodel-3.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:3cc6a3a014942b25b5876f46a95fb16640c22290561081563cf1bb5810a0e263", size = 162353, upload-time = "2025-06-06T06:45:45.677Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/90/834e0d346ac1b76752c0c1768e820d0330ad1e849b4ec51c53b2dd97cb17/winrt_windows_applicationmodel-3.2.1-cp312-cp312-win_arm64.whl", hash = "sha256:3cc3891022a6585cc00ac8e22277f0963c370782b82ebb68e6607a59e753e856", size = 163350, upload-time = "2025-06-06T06:45:46.855Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/bf/ee12f6fd29840d7db3c2827dc5033cf80d1d803bcc7faee9d3da26164753/winrt_windows_applicationmodel-3.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:bc849feca3d428aee5d54cecdb580e4a2cc38cc897fae83e8c88ba9e673b00cd", size = 162360, upload-time = "2025-06-06T06:45:49.018Z" },
-    { url = "https://files.pythonhosted.org/packages/e6/86/a26d9251dea76f692210373316e207d62641718a3fd95f0b11f1071ff15e/winrt_windows_applicationmodel-3.2.1-cp313-cp313-win_arm64.whl", hash = "sha256:62e9079aac2f0e40abb255bb598e286c50cc4e8fbc933d0f6837cef7d9287b42", size = 163358, upload-time = "2025-06-06T06:45:49.95Z" },
-]
-
-[[package]]
-name = "winrt-windows-foundation"
-version = "3.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "winrt-runtime", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/55/098ce7ea0679efcc1298b269c48768f010b6c68f90c588f654ec874c8a74/winrt_windows_foundation-3.2.1.tar.gz", hash = "sha256:ad2f1fcaa6c34672df45527d7c533731fdf65b67c4638c2b4aca949f6eec0656", size = 30485, upload-time = "2025-06-06T14:41:53.344Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/5e/b5059e4ece095351c496c9499783130c302d25e353c18031d5231b1b3b3c/winrt_windows_foundation-3.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:45550c5b6c2125cde495c409633e6b1ea5aa1677724e3b95eb8140bfccbe30c9", size = 118668, upload-time = "2025-06-06T07:11:02.475Z" },
-    { url = "https://files.pythonhosted.org/packages/a5/70/acbcb3ef07b1b67e2de4afab9176a5282cfd775afd073efe6828dfc65ace/winrt_windows_foundation-3.2.1-cp312-cp312-win_arm64.whl", hash = "sha256:94f4661d71cb35ebc52be7af112f2eeabdfa02cb05e0243bf9d6bd2cafaa6f37", size = 109671, upload-time = "2025-06-06T07:11:03.538Z" },
-    { url = "https://files.pythonhosted.org/packages/ba/7f/8d5108461351d4f6017f550af8874e90c14007f9122fa2eab9f9e0e9b4e1/winrt_windows_foundation-3.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:6e98617c1e46665c7a56ce3f5d28e252798416d1ebfee3201267a644a4e3c479", size = 118672, upload-time = "2025-06-06T07:11:05.55Z" },
-    { url = "https://files.pythonhosted.org/packages/44/f5/2edf70922a3d03500dab17121b90d368979bd30016f6dbca0d043f0c71f1/winrt_windows_foundation-3.2.1-cp313-cp313-win_arm64.whl", hash = "sha256:2a8c1204db5c352f6a563130a5a41d25b887aff7897bb677d4ff0b660315aad4", size = 109673, upload-time = "2025-06-06T07:11:06.398Z" },
 ]
 
 [[package]]

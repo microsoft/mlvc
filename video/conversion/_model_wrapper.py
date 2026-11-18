@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import platform
+import importlib
 import shutil
 import tarfile
 import tempfile
@@ -13,7 +13,6 @@ from typing import Any, NamedTuple
 import numpy as np
 import torch
 
-from . import _windowsml
 from .types import (
     CoremlComputeUnits,
     ModelOpProfile,
@@ -191,9 +190,14 @@ class ModelWrapper:
         return res
 
 
+_PLUGIN_EP_MODULES = {
+    "OpenVINOExecutionProvider": "onnxruntime_ep_openvino",
+    "QNNExecutionProvider": "onnxruntime_qnn",
+}
+
+
 def _load_onnx_model(model_path: Path | str, runtime_params: RuntimeParams):
     print(f"Loading ONNX model from {model_path} with execution provider {runtime_params.onnx_execution_provider}")
-    _windowsml.ensure_initialized()
     import onnxruntime as ort
 
     sess_options = ort.SessionOptions()
@@ -222,23 +226,13 @@ def _load_onnx_model(model_path: Path | str, runtime_params: RuntimeParams):
     elif runtime_params.onnx_execution_provider == OnnxExecutionProvider.OPENVINO:
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
 
-        if platform.system() == "Windows":
-            import onnxruntime.tools.add_openvino_win_libs as utils
-
-            utils.add_openvino_libs_to_path()
-
         provider_name = "OpenVINOExecutionProvider"
-        provider_options = {
-            "device_type": "NPU",
-            "precision": "FP16",
-        }
     elif runtime_params.onnx_execution_provider == OnnxExecutionProvider.QNN:
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
         sess_options.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
 
         provider_name = "QNNExecutionProvider"
         provider_options = {
-            "backend_path": "QnnHtp.dll",
             "htp_performance_mode": "burst",
             "htp_graph_finalization_optimization_mode": "3",
         }
@@ -256,11 +250,14 @@ def _load_onnx_model(model_path: Path | str, runtime_params: RuntimeParams):
         raise NotImplementedError(f"Unsupported onnx backend: {runtime_params.onnx_execution_provider}")
 
     provider_options.update(runtime_params.onnx_provider_options)
+    if provider_name in _PLUGIN_EP_MODULES and provider_name not in ort.get_available_providers():
+        plugin = importlib.import_module(_PLUGIN_EP_MODULES[provider_name])
+        ort.register_execution_provider_library(provider_name, plugin.get_library_path())
 
-    # When the plugin EP system is available (onnxruntime-windowsml or onnxruntime >= 1.24),
+    # When the plugin EP system is available (onnxruntime >= 1.24),
     # prefer add_provider_for_devices() over the legacy providers list.
     # Fall back to the legacy path if the EP is available as a provider but not as a device
-    # (e.g. onnxruntime-windowsml is not installed but onnxruntime has get_ep_devices).
+    # (e.g. CUDA in onnxruntime-gpu). Plugin EPs would silently run on CPU there.
     providers: list | None = None
     if hasattr(ort, "get_ep_devices"):
         ep_device_type = {
@@ -273,9 +270,8 @@ def _load_onnx_model(model_path: Path | str, runtime_params: RuntimeParams):
         }[provider_name]
         ep_devices = [d for d in ort.get_ep_devices() if d.ep_name == provider_name and d.device.type == ep_device_type]
         if ep_devices:
-            plugin_options = {k: v for k, v in provider_options.items() if k not in ["backend_path"]}
-            sess_options.add_provider_for_devices(ep_devices, plugin_options)
-        elif provider_name in ort.get_available_providers():
+            sess_options.add_provider_for_devices(ep_devices, provider_options)
+        elif provider_name in ort.get_available_providers() and provider_name not in _PLUGIN_EP_MODULES:
             providers = [(provider_name, provider_options)]
         else:
             raise RuntimeError(f"Requested EP {provider_name} not found in available EP devices or providers")
