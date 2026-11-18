@@ -3,7 +3,7 @@
 
 import queue
 import threading
-from typing import Iterable
+from collections.abc import Iterable
 
 __all__ = ["PrefetchIterator"]
 

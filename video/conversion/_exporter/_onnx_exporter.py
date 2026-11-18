@@ -6,17 +6,17 @@ from pathlib import Path
 import onnx
 import torch
 
-from ._base_exporter import BaseExporter
 from ..types import (
+    ConversionMetadata,
+    ModelData,
+    ModelPartMetadata,
+    ModelPrecision,
     ModelType,
     TargetDevice,
-    ModelPrecision,
-    ModelData,
-    ConversionMetadata,
     TensorLayout,
-    ModelPartMetadata,
 )
 from ..utils import to_torch_namedtuple
+from ._base_exporter import BaseExporter
 from ._onnx_utils import DEFAULT_ONNX_PASSES, OnnxOptimizer, convert_io_to_nhwc
 
 
@@ -89,6 +89,7 @@ class OnnxExporter(BaseExporter):
         # Precision conversion
         if self._precision == ModelPrecision.FP16:
             import warnings
+
             from onnxconverter_common import float16
 
             warnings.filterwarnings(

@@ -1,10 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
 import dataclasses
-from ._base_model import BaseFullModel
+
+import torch
+
 from src.models.dmc_6.dmc_61s import DMC
+
+from ._base_model import BaseFullModel
 
 
 class TraceableMLVC(BaseFullModel, DMC):

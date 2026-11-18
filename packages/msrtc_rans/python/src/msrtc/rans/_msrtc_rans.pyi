@@ -1,11 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from typing import Optional, Any
+from typing import Any
 
 from .types import RansVariant
 
-__all__ = ["RansEncoderStream", "RansDecoderStream", "EntropyEncoder", "EntropyDecoder"]
+__all__ = ["EntropyDecoder", "EntropyEncoder", "RansDecoderStream", "RansEncoderStream"]
 
 class RansEncoderStream:
     """
@@ -22,7 +22,6 @@ class RansEncoderStream:
         :param initialSize: initial buffer size
         :param maxSizeStep: max buffer size step
         """
-        pass
 
     def flush(self) -> memoryview:
         """
@@ -31,27 +30,23 @@ class RansEncoderStream:
         :return: encoded message
         """
 
-        pass
-
     def reset(self) -> None:
         """
         Resets the stream
         """
-        pass
 
 class RansDecoderStream:
     """
     rANS decoder stream
     """
 
-    def __init__(self, data: Optional[Any] = None, *, variant: RansVariant = RansVariant.RansByte):
+    def __init__(self, data: Any | None = None, *, variant: RansVariant = RansVariant.RansByte):
         """
         Initialize rANS decoder stream
 
         :param data: encoded message data
         :param variant: rANS variant
         """
-        pass
 
     def open(self, data) -> None:
         """
@@ -59,13 +54,11 @@ class RansDecoderStream:
 
         :param data: encoded message data
         """
-        pass
 
     def close(self) -> None:
         """
         Closes the stream
         """
-        pass
 
     def isOpen(self) -> bool:
         """
@@ -73,20 +66,18 @@ class RansDecoderStream:
 
         :return: open status
         """
-        pass
 
     def decodeEOF(self) -> None:
         """
         Check that decoding reached end of message and closes stream on success
         """
-        pass
 
-EntropyEncoder = Any
+type EntropyEncoder = Any
 """
 Entropy encoder implmentation
 """
 
-EntropyDecoder = Any
+type EntropyDecoder = Any
 """
 Entropy decoder implmentation
 """

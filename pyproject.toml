@@ -55,8 +55,8 @@ onnxruntime-windowsml = [
 [dependency-groups]
 ci = [
     "pytest",
-    "pyright",
-    "ruff==0.15.21",
+    "ty",
+    "ruff",
     "pre-commit",
     "pre-commit-hooks",
     "python-dotenv",
@@ -104,9 +104,36 @@ name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
-[tool.pyright]
+[tool.ruff]
+line-length = 120
+extend-exclude = ["video/src/vsr", "video/src/metrics/deqa"]
+
+[tool.ruff.lint]
+ignore = [
+    "LOG015", # Root logger is the project convention (the log format has no logger name)
+    "TRY004", # Invalid config types raise ValueError by design (tests rely on it)
+    "BLE001", # Broad excepts are deliberate: per-item error handling, cross-thread exception forwarding
+]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["conversion.types.RuntimeParams", "src.utils.rate_controller.RateModelParams"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "src",
+    "conversion",
+    "tests",
+    "compare_rd_video",
+    "compute_benchmark_metrics",
+    "process_P910_results",
+    "run_basicvsrpp",
+    "test_conversion",
+    "train_video",
+]
+combine-as-imports = true
+
+[tool.ty.src]
 include = ["video"]
-extraPaths = ["packages/msrtc_rans/python/src"]
 exclude = [
     "**/node_modules",
     "**/__pycache__",
@@ -119,10 +146,46 @@ exclude = [
     "video/src/utils/flow_tester.py",
     "packages/msrtc_rans/python/src",
 ]
-ignore = ["packages/msrtc_rans/python/src"]
-pythonVersion = "3.12"
-typeCheckingMode = "basic"
 
-[tool.ruff]
-line-length = 120
-extend-exclude = ["video/src/vsr", "video/src/metrics/deqa"]
+[tool.ty.environment]
+python-platform = "all"
+root = ["video"]
+extra-paths = ["packages/msrtc_rans/python/src"]
+
+[tool.ty.analysis]
+replace-imports-with-any = ["onnxruntime", "onnxruntime.**", "openvino", "openvino.**", "winui3", "winui3.**"]
+allowed-unresolved-imports = ["cv2.**", "facer.**", "lpips.**", "skimage.**", "torchvision.**"]
+
+[tool.ty.rules]
+incompatible-method-override = "ignore"
+incompatible-attribute-override = "ignore"
+lost-keyword-for-regular-parameter = "ignore"
+
+[[tool.ty.overrides]]
+include = [
+    "video/conversion/__init__.py",
+    "video/conversion/_exporter/__init__.py",
+    "video/conversion/_exporter/_base_exporter.py",
+    "video/conversion/_scale_decoder.py",
+    "video/src/utils/common.py",
+    "video/src/utils/model_factory.py",
+    "video/train_optic_flow.py",
+]
+
+[tool.ty.overrides.analysis]
+allowed-unresolved-imports = [
+    "conversion._exporter._coreml_ext",
+    "conversion._scale_decoder_ext",
+    "conversion._types_ext",
+    "src.models.legacy.video_net",
+    "src.utils.model_factory_ext",
+    "src.vsr.auto_avsr.api",
+]
+
+[[tool.ty.overrides]]
+include = ["video/conversion/_exporter/_coreml_utils.py", "video/notebooks/coreml_act_precision.ipynb"]
+rules = { missing-attribute = "ignore" }
+
+[[tool.ty.overrides]]
+include = ["video/conversion/_split_model/**"]
+rules = { mismatched-type-name = "ignore" }

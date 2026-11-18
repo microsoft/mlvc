@@ -8,20 +8,20 @@ import os
 import queue
 import subprocess
 import threading
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from PIL import Image
 
-from .os import set_pipe_buffer_size
 from ..transforms.functional import (
-    ycbcr420_to_rgb,
     rgb_to_ycbcr420,
-    ycbcr444_to_rgb,
     rgb_to_ycbcr444,
     ycbcr420_to_444,
+    ycbcr420_to_rgb,
     ycbcr444_to_420,
+    ycbcr444_to_rgb,
 )
+from .os import set_pipe_buffer_size
 
 
 class VideoWriter:
@@ -52,7 +52,7 @@ class VideoWriter:
             try:
                 self.close()
             except BaseException:
-                logging.error(f"Exception while closing {self.dst_path}", exc_info=True)
+                logging.exception(f"Exception while closing {self.dst_path}")
 
 
 class FrameFormatAdapter:
@@ -149,7 +149,7 @@ class RGBWriter(VideoWriter):
             raise ValueError(f"Unsupported dst format: {dst_format}")
 
         self.format_adapter = FrameFormatAdapter(dst_format, bit_depth)
-        self.file = open(dst_path, "wb")
+        self.file = open(dst_path, "wb")  # noqa: SIM115 - owned by the writer, closed in close()
 
     def write_one_frame(self, rgb=None, y=None, uv=None, src_format="rgb"):
         result = self.format_adapter(src_format=src_format, rgb=rgb, y=y, uv=uv)
@@ -169,7 +169,7 @@ class YUVWriter(VideoWriter):
             raise ValueError(f"Unsupported dst format: {dst_format}")
 
         self.format_adapter = FrameFormatAdapter(dst_format, bit_depth)
-        self.file = open(dst_path, "wb")
+        self.file = open(dst_path, "wb")  # noqa: SIM115 - owned by the writer, closed in close()
 
     def write_one_frame(self, rgb=None, y=None, uv=None, src_format="420"):
         result = self.format_adapter(src_format=src_format, rgb=rgb, y=y, uv=uv)
@@ -207,7 +207,7 @@ class _FFMpegWriterLoop:
         exception = self.exception
         if exception is not None and next(self.rethrow_count) == 0:
             self.exception = None
-            raise IOError(f"Error writing {self.filename} with ffmpeg") from exception
+            raise OSError(f"Error writing {self.filename} with ffmpeg") from exception
 
     def run(self):
         try:
@@ -226,15 +226,13 @@ class _FFMpegWriterLoop:
                     try:
                         self._wait(ffmpeg, check=False)
                     except Exception:
-                        logging.error(
-                            f"{self.filename}: exception while waiting for ffmpeg to terminate", exc_info=True
-                        )
+                        logging.exception(f"{self.filename}: exception while waiting for ffmpeg to terminate")
 
                     raise
 
             self._wait(ffmpeg, check=True)
             if not done:
-                raise IOError("ffmpeg process terminated before receiving all the data")
+                raise OSError("ffmpeg process terminated before receiving all the data")
         except Exception as e:
             self.exception = e
         finally:
@@ -264,7 +262,7 @@ class _FFMpegWriterLoop:
             try:
                 if ffmpeg.stdin is not None:
                     ffmpeg.stdin.close()
-            except IOError:
+            except OSError:
                 pass
 
             rc = ffmpeg.wait(60)
@@ -278,7 +276,7 @@ class _FFMpegWriterLoop:
                     # kill exception has preference over wait timeout
                     raise
 
-                logging.error(f"{self.filename}: exception while sending ffmpeg death signal", exc_info=True)
+                logging.exception(f"{self.filename}: exception while sending ffmpeg death signal")
 
             raise
 
@@ -287,7 +285,7 @@ class _FFMpegWriterLoop:
 
 
 class FFMpegWriter(VideoWriter):
-    def __init__(self, dst_path, *, width, height, fps, ffmpeg_options: Optional[Sequence[str]] = None):
+    def __init__(self, dst_path, *, width, height, fps, ffmpeg_options: Sequence[str] | None = None):
         super().__init__(dst_path, width, height)
 
         self.format_adapter = FrameFormatAdapter("420")

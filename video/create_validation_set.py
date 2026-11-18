@@ -29,6 +29,7 @@ Usage examples:
 """
 
 import argparse
+import contextlib
 import json
 import logging
 import os
@@ -55,6 +56,7 @@ def check_ffmpeg() -> str:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         first_line = result.stdout.split("\n")[0]
         log.info("Found %s", first_line)
@@ -71,7 +73,7 @@ def probe_frame_count(mp4_path: str, fps: int) -> int:
     Uses ffprobe to get duration/nb_frames, then converts to target fps.
     Returns -1 on any failure (caller should skip the video).
     """
-    try:
+    with contextlib.suppress(Exception):
         # fmt: off
         proc = subprocess.run(
             [
@@ -84,6 +86,7 @@ def probe_frame_count(mp4_path: str, fps: int) -> int:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         # fmt: on
         if proc.returncode != 0:
@@ -106,8 +109,6 @@ def probe_frame_count(mp4_path: str, fps: int) -> int:
         dur = stream.get("duration")
         if dur and dur != "N/A":
             return int(float(dur) * fps)
-    except Exception:
-        pass
 
     return -1
 
@@ -198,6 +199,7 @@ def convert_one(
             capture_output=True,
             text=True,
             timeout=600,  # 10-minute timeout per file
+            check=False,
         )
         if proc.returncode != 0:
             result["error"] = proc.stderr[-500:] if proc.stderr else "unknown error"

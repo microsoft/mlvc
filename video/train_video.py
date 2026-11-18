@@ -5,18 +5,19 @@ import contextlib
 import logging
 import numbers
 import random
+from collections.abc import Callable, Iterable, Sequence
 from functools import cached_property
-from typing import Any, Callable, Optional, Sequence, Iterable
+from typing import Any
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn.parallel.distributed import DistributedDataParallel
 
 from src.datasets.video_dataset import FastVideoFolder
 from src.datasets.weighted_dataset import WeightedDataset
 from src.transforms.functional import rgb2ycbcr
-from src.utils.app import BaseTrainVideoApp, keep_optimizer_implementation
 from src.utils.ane_mode import drift_simulation
+from src.utils.app import BaseTrainVideoApp, keep_optimizer_implementation
 from src.utils.flat_parameters import FlatParameters
 from src.utils.stream_helper import get_state_dict
 from src.utils.torch_compile import CompileSettings, TorchCompileManager, with_standard_strides
@@ -35,8 +36,8 @@ class ForwardPassWrapper(nn.Module):
         return forward(self.module, *args, **kwargs)
 
 
-def stack_frame_metrics(loss: torch.Tensor, rd: dict, ld: dict, **extra: Optional[torch.Tensor]):
-    metrics = dict(loss=loss.detach())
+def stack_frame_metrics(loss: torch.Tensor, rd: dict, ld: dict, **extra: torch.Tensor | None):
+    metrics = {"loss": loss.detach()}
     metrics.update((n, v.detach()) for n, v in rd.items() if n.startswith("bpp_"))
     metrics.update((n, v.detach()) for n, v in ld.items())
     metrics.update((n, v.detach()) for n, v in extra.items() if v is not None)
@@ -68,8 +69,8 @@ class FrameGradClipper:
         self._grad_norm, self._grad_scale = self._stats
 
     def clip(self, dpb):
-        to_pack = list()
-        split = list()
+        to_pack = []
+        split = []
         offset = 0
         for n, v in dpb.items():
             if v.requires_grad:
@@ -109,26 +110,26 @@ class TrainVideoApp(BaseTrainVideoApp):
 
         self.p_frame_offset = 1
         self.is_cascaded = False
-        self.cascade_frame_ranges: Optional[tuple[int, ...]] = None
+        self.cascade_frame_ranges: tuple[int, ...] | None = None
         self.is_ref_image_cascaded = False
         self.is_mv_feature_cascaded = False
         self.is_rand_rate = False
         self._per_frame_qp_prob = 0.0
         self._qp_transition_prob = 0.0
         self.loss_func = None
-        self._loss_func_args: Optional[dict[str, Any]] = None
+        self._loss_func_args: dict[str, Any] | None = None
         self.only_me = False
-        self.frame_index_map: Optional[tuple[int, ...]] = None
+        self.frame_index_map: tuple[int, ...] | None = None
         self.i_qp_map = None
         self.distortion_weights = None
         self.clear_grad_for_y_q = False
-        self._y_q_parameter_names: Optional[list[str]] = None
+        self._y_q_parameter_names: list[str] | None = None
         self._brightness_aug = None
 
         self._i_frame_model = None
         self._optic_flow_loss = None
-        self._on_train_step: Optional[Callable[[int], None]] = None
-        self._optimize_ddp: Optional[Any] = None
+        self._on_train_step: Callable[[int], None] | None = None
+        self._optimize_ddp: Any | None = None
 
     def close(self):
         super().close()
@@ -183,7 +184,7 @@ class TrainVideoApp(BaseTrainVideoApp):
     def compile_loss(self) -> bool:
         return self.get_config_by_path("train.compile_loss", default=True, expected_type=bool)
 
-    def load_model(self, model_state, pretrained: Optional[bool] = None):
+    def load_model(self, model_state, pretrained: bool | None = None):
         model = super().load_model(model_state, pretrained)
         if self.use_flat_parameters or self.compile_loss:
             # make_train_model compiles the wrapper that runs the model instead
@@ -258,7 +259,7 @@ class TrainVideoApp(BaseTrainVideoApp):
                 with torch.no_grad():
                     module.copy_(state[prefix])
             else:
-                prefix_states = dict()
+                prefix_states = {}
                 for n, p in state.items():
                     if len(n) > len(prefix) and n.startswith(prefix) and n[len(prefix)] == ".":
                         prefix_states[n[len(prefix) + 1 :]] = p
@@ -283,7 +284,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         return ForwardPassWrapper(model)
 
     @staticmethod
-    def get_unwrapped_model(model: Optional[torch.nn.Module]):
+    def get_unwrapped_model(model: torch.nn.Module | None):
         if isinstance(model, DistributedDataParallel):
             model = model.module
         if isinstance(model, ForwardPassWrapper):
@@ -295,7 +296,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         return model
 
     @property
-    def _compiled_model(self) -> Optional[nn.Module]:
+    def _compiled_model(self) -> nn.Module | None:
         """The module compiled for training: the codec model or the wrapper that runs it."""
         model = self.model
         if isinstance(model, DistributedDataParallel):
@@ -305,7 +306,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         return model
 
     @property
-    def flat_parameters(self) -> Optional[FlatParameters]:
+    def flat_parameters(self) -> FlatParameters | None:
         model = self._compiled_model
         if isinstance(model, FrameLossStep):
             model = model.model
@@ -338,7 +339,7 @@ class TrainVideoApp(BaseTrainVideoApp):
 
         kwargs = self.get_config_by_path("train.optimizer.params", default=None)
         if kwargs is None:
-            kwargs = dict()
+            kwargs = {}
         else:
             kwargs = kwargs.copy()
 
@@ -355,8 +356,8 @@ class TrainVideoApp(BaseTrainVideoApp):
             return optimizer_type(flat_parameters.flats.parameters(), **kwargs)
 
         if me_module_names is not None:
-            me_params = list()
-            remainder = list()
+            me_params = []
+            remainder = []
             for n, p in model.named_parameters():
                 if self._has_prefix(n, me_module_names):
                     me_params.append(p)
@@ -381,9 +382,8 @@ class TrainVideoApp(BaseTrainVideoApp):
             if ln > lp:
                 if name.startswith(prefix) and name[lp] == ".":
                     return True
-            elif ln == lp:
-                if name == prefix:
-                    return True
+            elif ln == lp and name == prefix:
+                return True
 
         return False
 
@@ -552,16 +552,16 @@ class TrainVideoApp(BaseTrainVideoApp):
         assert model is not None
         if transfer_weights != "none":
             logging.info(f"running weight transfer: {transfer_weights}")
-            model.copy_feature_extractor_weight(transfer_weights)  # type: ignore[operator]
+            model.copy_feature_extractor_weight(transfer_weights)
 
         only_me = False
         if param_group == "inter":
             only_me = True
             # train motion estimation and compensation blocks
-            self._require_grad(model, model.mv_module_names, invert=False)  # type: ignore[arg-type]
+            self._require_grad(model, model.mv_module_names, invert=False)
         elif param_group == "residue":
             # train residue network
-            self._require_grad(model, model.mv_module_names, invert=True)  # type: ignore[arg-type]
+            self._require_grad(model, model.mv_module_names, invert=True)
         elif param_group in (None, "both", "all"):
             modules_to_train = config.get("modules_to_train")
             if modules_to_train is not None:
@@ -575,9 +575,9 @@ class TrainVideoApp(BaseTrainVideoApp):
         self.only_me = only_me
 
         noise_level = config.get("noise_level", 0.5)
-        model.set_noise_level(noise_level)  # type: ignore[operator]
+        model.set_noise_level(noise_level)
 
-        model.set_use_ckpt(bool(config.get("use_backprop_checkpoints", False)))  # type: ignore[operator]
+        model.set_use_ckpt(bool(config.get("use_backprop_checkpoints", False)))
 
         self.is_cascaded = is_cascaded
         self.is_rand_rate = is_rand_rate
@@ -597,24 +597,24 @@ class TrainVideoApp(BaseTrainVideoApp):
 
         from src.losses.codec import get_loss_func
 
-        loss_args = dict(
-            loss_type=loss_type,
-            is_yuv420=self.is_yuv420,
-            mse_lambda_exponent=config.get("mse_lambda_exponent"),
-            bpp_weight=config.get("bpp_loss_weight"),
-            mse_y_weight=config.get("mse_y_weight"),
-            mse_yuv_420=config.get("mse_yuv_420"),
-            mse_yuv_mean_in_psnr=config.get("mse_yuv_mean_in_psnr"),
-            mse_rgb_weight=config.get("mse_rgb_weight"),
-            create_optic_flow_loss=self._create_optic_flow_loss,
-            auxiliary_models=self.auxiliary_models,
-            perceptual_loss_weight=config.get("perceptual_loss_weight"),
-            distortion_loss_weight=config.get("distortion_loss_weight"),
-            roi_weight=config.get("roi_weight"),
-            perceptual_rgb_weight=config.get("perceptual_rgb_weight"),
-            roi_bg_ratio=config.get("roi_bg_ratio"),
-            p_roi=config.get("p_roi"),
-        )
+        loss_args = {
+            "loss_type": loss_type,
+            "is_yuv420": self.is_yuv420,
+            "mse_lambda_exponent": config.get("mse_lambda_exponent"),
+            "bpp_weight": config.get("bpp_loss_weight"),
+            "mse_y_weight": config.get("mse_y_weight"),
+            "mse_yuv_420": config.get("mse_yuv_420"),
+            "mse_yuv_mean_in_psnr": config.get("mse_yuv_mean_in_psnr"),
+            "mse_rgb_weight": config.get("mse_rgb_weight"),
+            "create_optic_flow_loss": self._create_optic_flow_loss,
+            "auxiliary_models": self.auxiliary_models,
+            "perceptual_loss_weight": config.get("perceptual_loss_weight"),
+            "distortion_loss_weight": config.get("distortion_loss_weight"),
+            "roi_weight": config.get("roi_weight"),
+            "perceptual_rgb_weight": config.get("perceptual_rgb_weight"),
+            "roi_bg_ratio": config.get("roi_bg_ratio"),
+            "p_roi": config.get("p_roi"),
+        }
         # A compiled loss is guarded on the loss module: keep it while its configuration is unchanged, and drop the
         # graphs compiled with the previous one when it changes.
         if not (self.compile_loss and self.loss_func is not None and loss_args == self._loss_func_args):
@@ -657,7 +657,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         self.is_ref_image_cascaded = config.get("is_ref_image_cascaded", False)
         self.is_mv_feature_cascaded = config.get("is_mv_feature_cascaded", is_cascaded and n_frames < 8)
 
-        frame_index_map: tuple[int, ...] | None = model.frame_index_map  # type: ignore[assignment]
+        frame_index_map: tuple[int, ...] | None = model.frame_index_map
         if frame_index_map is not None and n_frames < 15 and len(frame_index_map) > 4:
             frame_index_map = frame_index_map[:4]
         self.frame_index_map = frame_index_map
@@ -822,7 +822,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         assert model is not None
         flat_parameters = self.flat_parameters
         if flat_parameters is None:
-            model.clear_grad_for_y_q()  # type: ignore[operator]
+            model.clear_grad_for_y_q()
             return
 
         names = self._y_q_parameter_names
@@ -832,7 +832,7 @@ class TrainVideoApp(BaseTrainVideoApp):
             parameters = dict(model.named_parameters())
             for p in parameters.values():
                 p.grad = torch.zeros_like(p)
-            model.clear_grad_for_y_q()  # type: ignore[operator]
+            model.clear_grad_for_y_q()
             self._y_q_parameter_names = names = [n for n, p in parameters.items() if p.grad is None]
             for p in parameters.values():
                 p.grad = None
@@ -1010,7 +1010,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         q_index = q_index.to(videos.device)
         lambdas = lambdas.to(videos.device)
 
-        kwargs = dict()
+        kwargs = {}
         if n_frames <= self.p_frame_offset + 1 and self.only_me:
             kwargs["only_me"] = self.only_me
 
@@ -1079,8 +1079,8 @@ class TrainVideoApp(BaseTrainVideoApp):
         dpb,
         q_index: torch.Tensor,
         lambdas: torch.Tensor,
-        masks: Optional[torch.Tensor] = None,
-        target_videos: Optional[torch.Tensor] = None,
+        masks: torch.Tensor | None = None,
+        target_videos: torch.Tensor | None = None,
         **kwargs,
     ):
         """Runs forward/backward pass over frames - optimizer takes a step after each frame and zeros gradients."""
@@ -1138,8 +1138,8 @@ class TrainVideoApp(BaseTrainVideoApp):
         q_index: torch.Tensor,
         frame_idx: int,
         lambdas: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        target_x: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
+        target_x: torch.Tensor | None = None,
         **kwargs,
     ):
         """Runs a forward pass over one frame, calculates frame loss and returns the metrics."""
@@ -1271,7 +1271,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         frame_idx: int,
         lambdas: torch.Tensor,
         is_last_frame: bool,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         **kwargs,
     ):
         """Runs a forward pass over one frame, updates the buffer and returns the metrics."""
@@ -1292,8 +1292,8 @@ class TrainVideoApp(BaseTrainVideoApp):
         dpb,
         q_index: torch.Tensor,
         lambdas: torch.Tensor,
-        masks: Optional[torch.Tensor] = None,
-        target_videos: Optional[torch.Tensor] = None,
+        masks: torch.Tensor | None = None,
+        target_videos: torch.Tensor | None = None,
         **kwargs,
     ):
         """Runs forward/backward pass over clip - optimizer takes a step after each clip, gradients
@@ -1313,7 +1313,7 @@ class TrainVideoApp(BaseTrainVideoApp):
         for frame_idx in self.cascade_frame_ranges:
             is_last = frame_idx == self.cascade_frame_ranges[-1]
             if not is_last and self.rank >= 0:
-                context = self.model.no_sync()  # type: ignore[operator]
+                context = self.model.no_sync()  # ty: ignore[call-non-callable]
             else:
                 context = contextlib.nullcontext()
 
@@ -1368,9 +1368,9 @@ class TrainVideoApp(BaseTrainVideoApp):
         return_dpb_frame,
         q_index: torch.Tensor,
         lambdas: torch.Tensor,
-        frame_grad_clipper: Optional[FrameGradClipper] = None,
-        masks: Optional[torch.Tensor] = None,
-        target_videos: Optional[torch.Tensor] = None,
+        frame_grad_clipper: FrameGradClipper | None = None,
+        masks: torch.Tensor | None = None,
+        target_videos: torch.Tensor | None = None,
     ):
         """Runs a forward pass over a clip by frames and returns the average loss."""
         return_dpb = None
@@ -1429,9 +1429,8 @@ class TrainVideoApp(BaseTrainVideoApp):
                 clip_metric_values += metric_values
 
         average_frame_loss = self.get_config_by_path("train.average_frame_loss", default=True)
-        if average_frame_loss:
-            if (stop - start) > 1:
-                clip_loss /= stop - start
+        if average_frame_loss and (stop - start) > 1:
+            clip_loss /= stop - start
         return clip_loss, return_dpb, clip_metric_names, clip_metric_values
 
     def _create_frame_grad_clipper(self):

@@ -5,7 +5,7 @@ import copy
 
 import pytest
 import torch
-import torch.nn as nn
+from torch import nn
 
 from src.utils.flat_parameters import FlatParameters
 
@@ -59,7 +59,7 @@ def test_training_through_flat_parameters_matches_per_parameter_training():
     # optimizer updates of the flat parameters are visible through the original parameters
     assert list(model.state_dict()) == state_dict_keys
     for (name, p), expected in zip(model.state_dict().items(), reference.state_dict().values()):
-        torch.testing.assert_close(p, expected, msg=lambda m: f"{name}: {m}")
+        torch.testing.assert_close(p, expected, msg=lambda m, name=name: f"{name}: {m}")
 
     # the flat optimizer state converts to the per-parameter layout and back
     per_param_state = flat.unflatten_optimizer_state(optimizers[1].state_dict())

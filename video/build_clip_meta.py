@@ -8,7 +8,8 @@ import json
 import logging
 import math
 import os
-from typing import Callable, List
+import sys
+from collections.abc import Callable
 
 import pandas as pd
 from tqdm import tqdm
@@ -121,18 +122,18 @@ def build_meta_from_file(fn):
     if rotation in (-90, 90, -270, 270):
         width, height = height, width
 
-    return dict(
-        filename=video_name,
-        codec_name=stream["codec_name"],
-        frame_rate=frame_rate,
-        width=width,
-        height=height,
-        rotation=rotation,
-        pix_fmt=stream["pix_fmt"],
-        n_frames=n_frames,
-        qp=int(stream.get("level", -1)),
-        bit_rate=bit_rate,
-    )
+    return {
+        "filename": video_name,
+        "codec_name": stream["codec_name"],
+        "frame_rate": frame_rate,
+        "width": width,
+        "height": height,
+        "rotation": rotation,
+        "pix_fmt": stream["pix_fmt"],
+        "n_frames": n_frames,
+        "qp": int(stream.get("level", -1)),
+        "bit_rate": bit_rate,
+    }
 
 
 def build_meta_from_file_and_log_error(fn):
@@ -143,8 +144,8 @@ def build_meta_from_file_and_log_error(fn):
         raise
 
 
-def call_on_list(func: Callable, arglist: List, desc: str):
-    result_list = list()
+def call_on_list(func: Callable, arglist: list, desc: str):
+    result_list = []
 
     max_workers = max(1, (os.cpu_count() or 1) - 1)
     max_workers = min(max_workers, 8, len(arglist))
@@ -164,7 +165,7 @@ def call_on_list(func: Callable, arglist: List, desc: str):
 
 
 def build_meta(source_dir):
-    filelist = list()
+    filelist = []
     for dirname, _, filenames in os.walk(source_dir):
         for fn in filenames:
             filelist.append(os.path.join(dirname, fn))
@@ -192,7 +193,7 @@ def load_processed_json(fn):
 
 
 def load_processed(source_dir):
-    filelist = list()
+    filelist = []
     for dirname, _, filenames in os.walk(source_dir):
         for fn in filenames:
             filelist.append(os.path.join(dirname, fn))
@@ -225,7 +226,7 @@ def main():
         df.to_json(args.meta, orient="records")
     else:
         df["num_pixels"] = df["width"] * df["height"]
-        df.sort_values(by=["num_pixels", "n_frames", "filename"], inplace=True)  # type: ignore[call-overload]
+        df.sort_values(by=["num_pixels", "n_frames", "filename"], inplace=True)
         df.drop(columns=["num_pixels"])
 
         for idx in range(split):
@@ -235,4 +236,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

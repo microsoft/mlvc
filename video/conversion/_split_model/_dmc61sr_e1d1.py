@@ -1,33 +1,36 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import numpy as np
 from collections import namedtuple
 from dataclasses import dataclass
-from ..types import (
-    ModelPartId,
-    ModelData,
-    EncoderOutput,
-    DecoderOutput,
-    RuntimeParams,
-    PaddingMode,
-    PaddingDirection,
-)
+
+import numpy as np
+import torch
+from msrtc.rans import RansDecoderStream
+
+from src.models.utils import apply_upper_lower_bound
+from src.utils.stream_helper import get_downsampled_shape
+
 from .._full_model import BaseFullModel
 from .._model_wrapper import ModelWrapper
 from .._scale_decoder import BaseScaleDecoder, UpsampleScaleDecoder
+from ..types import (
+    DecoderOutput,
+    EncoderOutput,
+    ModelData,
+    ModelPartId,
+    PaddingDirection,
+    PaddingMode,
+    RuntimeParams,
+)
 from ._base_split_model import (
     BaseDecoderPart,
+    BaseEncoderPart,
     BaseReferenceData,
     BaseReferenceManager,
-    BaseEncoderPart,
     BaseSplitModel,
     prepare_model_parts,
 )
-from src.models.utils import apply_upper_lower_bound
-from src.utils.stream_helper import get_downsampled_shape
-from msrtc.rans import RansDecoderStream
 
 
 class Encoder(BaseEncoderPart):
@@ -50,7 +53,7 @@ class Encoder(BaseEncoderPart):
         results = self.model.compress_core(x=x, dpb=dpb, q_index=q_index_shifted, do_shift_qp=False, get_recon=False)
 
         feature = results["dpb"]["ref_feature"]
-        (y_raw_0, scales_0), (y_raw_1, scales_1) = results["y_raw"]
+        (y_raw_0, _scales_0), (y_raw_1, _scales_1) = results["y_raw"]
         z_raw = results["z_raw"]
 
         return self.OutputType(
@@ -117,7 +120,7 @@ class ReferenceManager(BaseReferenceManager):
         self._buffer[frame_idx] = ReferenceData(ref_feature=model_outputs.feature.copy())
 
     def load(self, ref_frame_idx: int | None, feature_reset: bool = False) -> ReferenceData:
-        return super().load(ref_frame_idx, feature_reset=feature_reset)  # type: ignore[return-value]
+        return super().load(ref_frame_idx, feature_reset=feature_reset)  # ty: ignore[invalid-return-type]
 
 
 class SplitModel(BaseSplitModel):

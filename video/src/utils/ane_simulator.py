@@ -6,26 +6,24 @@
 import torch
 import torch.nn.functional as F
 
-from typing import Union
-
 __all__ = [
-    "ane_conv2d",
     "ane_add",
-    "ane_mul",
-    "ane_leaky_relu",
-    "ane_clamp",
-    "ane_sigmoid",
+    "ane_add_ste",
     "ane_approx_sigmoid",
-    "ane_pixel_shuffle",
-    "ane_pixel_unshuffle",
+    "ane_approx_sigmoid_ste",
+    "ane_clamp",
+    "ane_conv2d",
     # STE (straight-through estimator) variants for differentiable training.
     "ane_conv2d_ste",
-    "ane_add_ste",
-    "ane_mul_ste",
+    "ane_leaky_relu",
     "ane_leaky_relu_ste",
-    "ane_sigmoid_ste",
-    "ane_approx_sigmoid_ste",
+    "ane_mul",
+    "ane_mul_ste",
+    "ane_pixel_shuffle",
     "ane_pixel_shuffle_ste",
+    "ane_pixel_unshuffle",
+    "ane_sigmoid",
+    "ane_sigmoid_ste",
 ]
 
 P = 16  # Binary point for fixed-point accumulator
@@ -89,8 +87,8 @@ def ane_conv2d(
     input_fp16,
     weight_fp16,
     bias_fp16=None,
-    stride: Union[int, tuple] = 1,
-    padding: Union[int, tuple] = 0,
+    stride: int | tuple = 1,
+    padding: int | tuple = 0,
     groups: int = 1,
 ):
     """Simulate ANE Conv2d with P=16 fixed-point accumulation.
@@ -295,8 +293,8 @@ def ane_conv2d_ste(
     input_fp16,
     weight_fp16,
     bias_fp16=None,
-    stride: Union[int, tuple] = 1,
-    padding: Union[int, tuple] = 0,
+    stride: int | tuple = 1,
+    padding: int | tuple = 0,
     groups: int = 1,
 ):
     gpu = (

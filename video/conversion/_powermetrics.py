@@ -1,12 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import sys
-import time
 import plistlib
-import threading
 import subprocess
+import sys
+import threading
+import time
 from contextlib import contextmanager
+
 from .types import PowermetricsData, PowermetricsSample, PowermetricsStats
 
 
@@ -42,7 +43,7 @@ class PowerMetricsCollector:
 
     def get_data(self) -> PowermetricsData:
         stats = {}
-        for context in set(row.context for row in self._samples):
+        for context in {row.context for row in self._samples}:
             if context == "":
                 continue
             stats[context] = PowermetricsStats.from_samples(context, self._samples)

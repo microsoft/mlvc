@@ -96,7 +96,7 @@ def _make_train_app(model, train_config, *, compile_model, cascade_frame_ranges)
     app.use_drift_loss = False
     app.frame_index_map = (0,)
     app.cascade_frame_ranges = cascade_frame_ranges
-    app.loss_func = FrameLoss()  # pyright: ignore[reportAttributeAccessIssue]
+    app.loss_func = FrameLoss()
     app.torch_compile.compile(model, "training model")
     app.model = app.make_train_model(model)
     app.optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
@@ -127,8 +127,8 @@ def assert_compiled_training_matches_eager(frame_block, train_config, cascade_fr
         assert names == expected_names
         torch.testing.assert_close(values, expected_values)
         for (name, param), expected_param in zip(model.named_parameters(), reference.parameters()):
-            torch.testing.assert_close(param.grad, expected_param.grad, msg=lambda m: f"{name} grad: {m}")
-            torch.testing.assert_close(param, expected_param, msg=lambda m: f"{name}: {m}")
+            torch.testing.assert_close(param.grad, expected_param.grad, msg=lambda m, name=name: f"{name} grad: {m}")
+            torch.testing.assert_close(param, expected_param, msg=lambda m, name=name: f"{name}: {m}")
 
 
 @pytest.fixture(autouse=True)
@@ -493,7 +493,7 @@ def test_training_options_train_like_per_parameter_eager(backend, cascade_frame_
         app.use_drift_loss = False
         app.frame_index_map = (0,)
         app.cascade_frame_ranges = cascade_frame_ranges
-        app.loss_func = FrameLoss()  # pyright: ignore[reportAttributeAccessIssue]
+        app.loss_func = FrameLoss()
         app.model = app.make_train_model(m)
         app.optimizer = app.create_optimizer()
         apps.append(app)
@@ -518,7 +518,7 @@ def test_training_options_train_like_per_parameter_eager(backend, cascade_frame_
             assert names == expected_names
             torch.testing.assert_close(values, expected_values)
             for (name, param), expected_param in zip(model.named_parameters(), reference.parameters()):
-                torch.testing.assert_close(param, expected_param, msg=lambda m: f"{name}: {m}")
+                torch.testing.assert_close(param, expected_param, msg=lambda m, name=name: f"{name}: {m}")
 
     expected_state, state = (app.get_train_state(0)["optimizer"] for app in apps)
     assert state["param_groups"] == expected_state["param_groups"]
@@ -562,7 +562,7 @@ def test_flat_parameters_clear_grad_for_y_q_like_per_parameter_eager(backend):
         app.frame_index_map = (0,)
         loss_func = FrameLoss()
         loss_func.bpp_weight = 0.0
-        app.loss_func = loss_func  # pyright: ignore[reportAttributeAccessIssue]
+        app.loss_func = loss_func
         app.clear_grad_for_y_q = True
         app.model = app.make_train_model(m)
         app.optimizer = app.create_optimizer()
@@ -578,7 +578,7 @@ def test_flat_parameters_clear_grad_for_y_q_like_per_parameter_eager(backend):
 
     assert model.q_scale.item() == 1.5
     for (name, param), expected_param in zip(model.named_parameters(), reference.parameters()):
-        torch.testing.assert_close(param, expected_param, msg=lambda m: f"{name}: {m}")
+        torch.testing.assert_close(param, expected_param, msg=lambda m, name=name: f"{name}: {m}")
 
 
 def test_flat_parameters_reject_eager_training():
@@ -647,7 +647,7 @@ def test_drift_loss_continues_without_flat_parameters_and_compiled_loss(backend)
         app._device = torch.device("cuda")
         app.use_drift_loss = False
         app.frame_index_map = (0,)
-        app.loss_func = FrameLoss()  # pyright: ignore[reportAttributeAccessIssue]
+        app.loss_func = FrameLoss()
         app.model = app.make_train_model(m)
         app.optimizer = app.create_optimizer()
         apps.append(app)
@@ -668,6 +668,6 @@ def test_drift_loss_continues_without_flat_parameters_and_compiled_loss(backend)
     train_step()
 
     for (name, param), expected_param in zip(model.named_parameters(), reference.parameters()):
-        torch.testing.assert_close(param, expected_param, msg=lambda m: f"{name}: {m}")
+        torch.testing.assert_close(param, expected_param, msg=lambda m, name=name: f"{name}: {m}")
     expected_state, state = (app.get_train_state(0)["optimizer"] for app in apps)
     torch.testing.assert_close(state["state"], expected_state["state"])

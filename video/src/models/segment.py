@@ -1,13 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
+import logging
 import os
 import warnings
-import logging
 
 import torch
-import torch.nn as nn
-from torchvision.models.segmentation.deeplabv3 import DeepLabV3_ResNet50_Weights  # type: ignore[reportMissingImports]
+from torch import nn
+from torchvision.models.segmentation.deeplabv3 import DeepLabV3_ResNet50_Weights
 
 from src.transforms.functional import ycbcr2rgb
 
@@ -22,8 +22,8 @@ def normalize(tensor, mean, std):
 class FaRLModel(nn.Module):
     def __init__(self, pretrained_path: str, device):
         super().__init__()
-        from facer.face_detection import RetinaFaceDetector  # type: ignore[reportMissingImports]
-        from facer.face_parsing import FaRLFaceParser  # type: ignore[reportMissingImports]
+        from facer.face_detection import RetinaFaceDetector
+        from facer.face_parsing import FaRLFaceParser
 
         detector_path = os.path.join(pretrained_path, "checkpoints", "mobilenet0.25_Final.pth")
         parser_path = os.path.join(pretrained_path, "checkpoints", "face_parsing.farl.lapa.main_ema_136500_jit191.pt")
@@ -56,7 +56,7 @@ class FaRLModel(nn.Module):
         seg_logits = faces["seg"]["logits"]
         seg_probs = 1 - seg_logits.softmax(dim=1)  # nfaces x nclasses x h x w
 
-        image_ids = set([f.item() for f in faces["image_ids"]])
+        image_ids = {f.item() for f in faces["image_ids"]}
         masks = []
         for iid in range(batch_size):
             if iid in image_ids:
@@ -73,7 +73,7 @@ class FaRLModel(nn.Module):
 class DeepLabV3Model(nn.Module):
     def __init__(self, pretrained_path: str):
         super().__init__()
-        self.model: nn.Module = torch.hub.load(  # type: ignore[reportAttributeAccessIssue]
+        self.model: nn.Module = torch.hub.load(
             repo_or_dir=pretrained_path,
             source="local",
             model="deeplabv3_resnet50",

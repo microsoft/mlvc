@@ -1,22 +1,28 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import numpy as np
 from collections import namedtuple
 from dataclasses import dataclass
-from ..types import (
-    ModelPartId,
-    ModelData,
-    EncoderOutput,
-    DecoderOutput,
-    RuntimeParams,
-    PaddingMode,
-    PaddingDirection,
-)
+
+import numpy as np
+import torch
+from msrtc.rans import RansDecoderStream
+
+from src.models.utils import apply_upper_lower_bound
+from src.utils.stream_helper import get_downsampled_shape
+
 from .._full_model import BaseFullModel
 from .._model_wrapper import ModelWrapper
 from .._scale_decoder import BaseScaleDecoder, UpsampleScaleDecoder
+from ..types import (
+    DecoderOutput,
+    EncoderOutput,
+    ModelData,
+    ModelPartId,
+    PaddingDirection,
+    PaddingMode,
+    RuntimeParams,
+)
 from ._base_split_model import (
     BaseDecoderPart,
     BaseReferenceDataWithFrame,
@@ -24,11 +30,7 @@ from ._base_split_model import (
     BaseSplitModel,
     prepare_model_parts,
 )
-from ._dmc61s_e2d1 import EncoderPart1 as Dmc61sEncoderPart1
-from ._dmc61s_e2d1 import EncoderPart2 as Dmc61sEncoderPart2
-from src.models.utils import apply_upper_lower_bound
-from src.utils.stream_helper import get_downsampled_shape
-from msrtc.rans import RansDecoderStream
+from ._dmc61s_e2d1 import EncoderPart1 as Dmc61sEncoderPart1, EncoderPart2 as Dmc61sEncoderPart2
 
 
 class EncoderPart1(Dmc61sEncoderPart1):

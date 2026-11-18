@@ -4,8 +4,9 @@
 import logging
 import os
 import time
+from collections.abc import Mapping
 from threading import Condition, RLock, Thread
-from typing import Any, Mapping
+from typing import Any
 
 from mlflow import MlflowClient
 from mlflow.entities import Metric

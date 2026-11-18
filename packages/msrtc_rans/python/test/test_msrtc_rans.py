@@ -3,11 +3,9 @@
 
 import os.path
 import zipfile
-from typing import Optional
 
 import numpy as np
-
-from msrtc.rans import RansVariant, RansEncoderStream, RansDecoderStream, EntropyEncoder, EntropyDecoder
+from msrtc.rans import EntropyDecoder, EntropyEncoder, RansDecoderStream, RansEncoderStream, RansVariant
 
 
 def test_encode_decode_byte_0():
@@ -155,9 +153,9 @@ class ZipTestBundle:
 def run_encode_decode_on_zip_test_bundle(
     bundle_name: str,
     *,
-    variant: Optional[RansVariant] = None,
-    symbolBits: Optional[int] = None,
-    bypassBits: Optional[int] = None,
+    variant: RansVariant | None = None,
+    symbolBits: int | None = None,
+    bypassBits: int | None = None,
 ):
     with ZipTestBundle(bundle_name) as bundle:
         pmfLengths = bundle.read_ndarray("pmf_lengths.np")
@@ -168,7 +166,7 @@ def run_encode_decode_on_zip_test_bundle(
 
         bitstream = bundle.read_bytes("bitstream.bin")
 
-    coderArgs = dict()
+    coderArgs = {}
     if variant is not None:
         coderArgs["variant"] = variant
     if symbolBits is not None:

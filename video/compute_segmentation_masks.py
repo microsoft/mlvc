@@ -3,17 +3,18 @@
 
 import glob
 import json
+import logging
 import os
 from pathlib import Path, PurePosixPath
-import numpy as np
-from torch.utils.data import DataLoader, Dataset
-import torch
-from PIL import Image
-import logging
 from time import time
 
-from src.utils.app import BaseApp
+import numpy as np
+import torch
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset
+
 from src.models.segment import SegmentationModel
+from src.utils.app import BaseApp
 from src.utils.distributed.operations import run_distributed
 from src.utils.video_reader import YUVReader
 
@@ -33,8 +34,8 @@ def resize_min_side(image, target=540):
     if m == target:
         return image
     scale = target / m
-    new_w = int(round(w * scale))
-    new_h = int(round(h * scale))
+    new_w = round(w * scale)
+    new_h = round(h * scale)
     return image.resize((new_w, new_h), Image.Resampling.BILINEAR)
 
 
@@ -247,8 +248,8 @@ class CreateSegmentationMaskApp(BaseApp):
         if m == target:
             return x
         scale = target / m
-        new_h = int(round(h * scale))
-        new_w = int(round(w * scale))
+        new_h = round(h * scale)
+        new_w = round(w * scale)
         return torch.nn.functional.interpolate(x, size=(new_h, new_w), mode="bilinear", align_corners=False)
 
     def _process_yuv_sequence(self, task):

@@ -7,8 +7,8 @@ import json
 import os
 import sys
 import traceback
+from collections.abc import Sequence
 from functools import cached_property
-from typing import Sequence
 
 import numpy as np
 import pandas as pd
@@ -46,7 +46,7 @@ class SequenceBuilder:
 
     @cached_property
     def scale_factors(self):
-        scale_factors = dict()
+        scale_factors = {}
         for f, w in self.config.get("scale_factors", {}).items():
             f = int(f)
             if f < 1:
@@ -129,11 +129,11 @@ class SequenceBuilder:
 
         clip_info = pd.DataFrame(
             clip_info.values.repeat(len(df), axis=0),
-            index=df.index,  # type: ignore[reportAttributeAccessIssue]
-            columns=clip_info.columns,  # type: ignore[reportAttributeAccessIssue]
+            index=df.index,
+            columns=clip_info.columns,
         )
         clip_info.rename(columns={"n_frames": "total_frames"}, inplace=True)
-        df = pd.concat([clip_info, df], axis=1)  # type: ignore[reportCallIssue]
+        df = pd.concat([clip_info, df], axis=1)
         return df
 
     def _flatten_dict(self, d, prefix):
@@ -151,7 +151,7 @@ class SequenceBuilder:
                 filenames = (x.strip() for x in f)
                 filenames = [(metrics_folder, x) for x in filenames if x]
 
-        df_list = list()
+        df_list = []
         if self.process_count == 1:
             for d, fn in tqdm(filenames, file=sys.stdout):
                 df = self._process_metrics(d, fn)
@@ -209,7 +209,7 @@ class SequenceBuilder:
         # number of sequences per scene
         n_sequences = np.bincount(selected, minlength=len(scenes))
 
-        sequences = list()
+        sequences = []
         for t, count in zip(scenes.itertuples(), n_sequences):
             if count == 0:
                 continue
@@ -230,20 +230,20 @@ class SequenceBuilder:
                 start += t.start_frame + idx * sequence_length
                 assert start + sequence_length <= t.last_frame + 1
                 sequences.append(
-                    dict(
-                        filename=t.filename,
-                        start_frame=start,
-                        n_frames=sequence_length,
-                        scale_factor=self._sample_scale_factor(t),
-                        bbox_top=t.bbox_top,
-                        bbox_bottom=t.bbox_bottom,
-                        bbox_left=t.bbox_left,
-                        bbox_right=t.bbox_right,
-                        width=t.width,
-                        height=t.height,
-                        frame_rate=t.frame_rate,
-                        total_frames=t.total_frames,
-                    )
+                    {
+                        "filename": t.filename,
+                        "start_frame": start,
+                        "n_frames": sequence_length,
+                        "scale_factor": self._sample_scale_factor(t),
+                        "bbox_top": t.bbox_top,
+                        "bbox_bottom": t.bbox_bottom,
+                        "bbox_left": t.bbox_left,
+                        "bbox_right": t.bbox_right,
+                        "width": t.width,
+                        "height": t.height,
+                        "frame_rate": t.frame_rate,
+                        "total_frames": t.total_frames,
+                    }
                 )
 
         sequences = pd.DataFrame.from_records(sequences)
@@ -260,7 +260,7 @@ class SequenceBuilder:
 
         scale_factors = self.scale_factors
 
-        weights = list()
+        weights = []
         for f, w in scale_factors:
             if self.patch_width * f > width or self.patch_height * f > height:
                 break
@@ -307,4 +307,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

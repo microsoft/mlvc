@@ -7,17 +7,16 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ..common_model import CompressionModel
-from .layers import SubpelConv2x, DepthConvBlock, ResidualBlockUpsample, ResidualBlockWithStride2
-from ..utils import CkptModule
 from ...utils.stream_helper import (
-    get_downsampled_shape,
-    open_encoder_streams,
-    flush_encoder_streams,
-    open_decoder_streams,
     check_decoder_eof,
+    flush_encoder_streams,
+    get_downsampled_shape,
+    open_decoder_streams,
+    open_encoder_streams,
 )
-
+from ..common_model import CompressionModel
+from ..utils import CkptModule
+from .layers import DepthConvBlock, ResidualBlockUpsample, ResidualBlockWithStride2, SubpelConv2x
 
 g_ch_src_d = 3 * 8 * 8
 g_ch_recon = 320
@@ -286,17 +285,17 @@ class DMC(CompressionModel):
 
         x_hat, feature = self.get_recon_and_feature(y_hat, ctx, q_decoder, q_index, get_recon)
 
-        dpb = dict(
-            ref_frame=x_hat,
-            ref_feature=feature,
-        )
+        dpb = {
+            "ref_frame": x_hat,
+            "ref_feature": feature,
+        }
 
-        result = dict(
-            dpb=dpb,
-            q_index=q_index,
-            z_raw=z_raw,
-            y_raw=y_raw,
-        )
+        result = {
+            "dpb": dpb,
+            "q_index": q_index,
+            "z_raw": z_raw,
+            "y_raw": y_raw,
+        }
 
         return result
 
@@ -315,11 +314,11 @@ class DMC(CompressionModel):
 
         bit_stream = flush_encoder_streams(streams)
 
-        result = dict(
-            x_hat=dpb["ref_frame"],
-            dpb=dpb,
-            bit_stream=bit_stream,
-        )
+        result = {
+            "x_hat": dpb["ref_frame"],
+            "dpb": dpb,
+            "bit_stream": bit_stream,
+        }
 
         if calc_bits_estimates:
             bits_y = self.get_y_bits_estimate(y_raw)
@@ -391,12 +390,12 @@ class DMC(CompressionModel):
 
         x_hat, feature = self.get_recon_and_feature(y_hat, part2["ctx"], q_decoder, q_index)
 
-        dpb = dict(
-            ref_frame=x_hat,
-            ref_feature=feature,
-        )
+        dpb = {
+            "ref_frame": x_hat,
+            "ref_feature": feature,
+        }
 
-        return dict(x_hat=x_hat, dpb=dpb)
+        return {"x_hat": x_hat, "dpb": dpb}
 
     def forward(self, x, dpb, *, q_index, fa_idx):
         result = self.compress_core(x, dpb, q_index, fa_idx)
@@ -419,13 +418,13 @@ class DMC(CompressionModel):
         bpp_z = bits_z / pixel_num
         bpp = bits / pixel_num
 
-        return dict(
-            bpp_y=bpp_y,
-            bpp_z=bpp_z,
-            bpp=bpp,
-            dpb=dpb,
-            x_hat=dpb["ref_frame"],
-            bits=bits,
-            bits_y=bits_y,
-            bits_z=bits_z,
-        )
+        return {
+            "bpp_y": bpp_y,
+            "bpp_z": bpp_z,
+            "bpp": bpp,
+            "dpb": dpb,
+            "x_hat": dpb["ref_frame"],
+            "bits": bits,
+            "bits_y": bits_y,
+            "bits_z": bits_z,
+        }

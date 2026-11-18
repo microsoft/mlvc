@@ -1,39 +1,39 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import shutil
-import platform
 import datetime
-
-from pathlib import Path
+import platform
+import shutil
 from abc import ABC, abstractmethod
+from pathlib import Path
+
+import torch
+
+from .._frame_loop import FrameLoop, aggregate_frame_loop_results
+from .._split_model import BaseSplitModel
 from ..const import (
+    DEFAULT_CONVERT_FRAME_COUNT,
     DEFAULT_EXPORT_DIR,
     DEFAULT_TEST_DATA_DIR,
-    DEFAULT_CONVERT_FRAME_COUNT,
     get_default_test_video,
 )
 from ..types import (
-    ModelPartId,
-    ModelData,
-    ExporterParams,
-    ConversionParams,
     ConversionMetadata,
-    ModelType,
-    TargetDevice,
-    ModelPrecision,
-    ScaleDecoderType,
+    ConversionParams,
+    ExporterParams,
     FrameLoopParams,
     FrameLoopSummary,
-    TensorLayout,
+    ModelData,
     ModelFieldMetadata,
+    ModelPartId,
     ModelPartMetadata,
+    ModelPrecision,
+    ModelType,
+    ScaleDecoderType,
+    TargetDevice,
+    TensorLayout,
 )
-from .._frame_loop import FrameLoop, aggregate_frame_loop_results
-from .._split_model import BaseSplitModel
 from ..utils import get_git_revision_hash
-
 
 _IMAGE_FIELDS = {
     "x",
@@ -64,11 +64,13 @@ class BaseExporter(ABC):
         image_width: int | None = None,
         image_height: int | None = None,
         frame_count: int = DEFAULT_CONVERT_FRAME_COUNT,
-        q_index_list: list[int] = [21, 63],
+        q_index_list: list[int] | None = None,
         output_path: Path | str = DEFAULT_EXPORT_DIR,
         output_name: str | None = None,
         skip_if_exists: bool = False,
     ) -> None:
+        if q_index_list is None:
+            q_index_list = [21, 63]
         print(
             f"Exporting model type: {model_type.value}, target device: {target_device.value}, precision: "
             f"{precision.value}, image layout: {image_layout.value}, feature layout: {feature_layout.value}"
@@ -243,9 +245,13 @@ class BaseExporter(ABC):
         self,
         output_name: str,
         model_parts_metadata: dict[ModelPartId, ModelPartMetadata],
-        conversion_loop_params: list[FrameLoopParams] = [],
-        conversion_loop_results: list[FrameLoopSummary] = [],
+        conversion_loop_params: list[FrameLoopParams] | None = None,
+        conversion_loop_results: list[FrameLoopSummary] | None = None,
     ) -> ConversionMetadata:
+        if conversion_loop_results is None:
+            conversion_loop_results = []
+        if conversion_loop_params is None:
+            conversion_loop_params = []
         split_model = self._split_model
 
         assert self._scale_decoder_type is not None, "Scale decoder type must be resolved before composing metadata"

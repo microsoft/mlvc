@@ -3,15 +3,16 @@
 
 """Validate ANE simulation."""
 
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import coremltools as ct
-import warnings
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
+
+import coremltools as ct
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import src.utils.ane_simulator as ane

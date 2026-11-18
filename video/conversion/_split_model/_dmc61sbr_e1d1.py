@@ -1,19 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
 from collections import namedtuple
+
+import torch
+
+from src.models.utils import apply_upper_lower_bound
+
+from .._full_model import BaseFullModel
+from .._model_wrapper import ModelWrapper
 from ..types import (
     ModelPartId,
     RuntimeParams,
 )
-from .._full_model import BaseFullModel
-from .._model_wrapper import ModelWrapper
 from ._base_split_model import BaseDecoderPart, prepare_model_parts
-from ._dmc61sr_e1d1 import Encoder as Dmc61srEncoder
-from ._dmc61sr_e1d1 import ReferenceManager as Dmc61srReferenceManager
-from ._dmc61sr_e1d1 import SplitModel as Dmc61srSplitModel
-from src.models.utils import apply_upper_lower_bound
+from ._dmc61sr_e1d1 import (
+    Encoder as Dmc61srEncoder,
+    ReferenceManager as Dmc61srReferenceManager,
+    SplitModel as Dmc61srSplitModel,
+)
 
 
 class Encoder(Dmc61srEncoder):

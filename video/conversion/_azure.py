@@ -3,9 +3,11 @@
 
 import time
 from pathlib import Path
+
+from azure.ai.ml import MLClient
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
-from azure.ai.ml import MLClient
+
 from ._env import get_required_env
 
 
@@ -37,8 +39,7 @@ def download_blob(
     blob_client = blob_service_client.get_blob_client(container=container_name, blob=str(blob_name))
     download_stream = blob_client.download_blob(max_concurrency=4)
     with open(destination_file_path, "wb") as download_file:
-        for chunk in download_stream.chunks():
-            download_file.write(chunk)
+        download_file.writelines(download_stream.chunks())
 
     # Print stats
     download_duration = time.time() - download_start

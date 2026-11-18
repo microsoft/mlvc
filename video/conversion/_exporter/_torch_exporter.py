@@ -1,10 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
 from pathlib import Path
+
+import torch
+
+from ..types import ModelData, ModelPartMetadata, ModelPrecision, ModelType, TensorLayout
 from ._base_exporter import BaseExporter
-from ..types import ModelType, ModelPrecision, ModelData, TensorLayout, ModelPartMetadata
 
 
 class TorchExporter(BaseExporter):

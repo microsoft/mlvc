@@ -4,11 +4,12 @@
 import argparse
 import json
 import os
-from typing import Dict
 import warnings
-import numpy as np
+
 import matplotlib
+import numpy as np
 from matplotlib import pyplot as plt
+
 from src.metrics.bjontegaard_metric import calculate_bd_rate
 from src.utils.common import create_folder
 
@@ -160,7 +161,7 @@ def rotate_results(ds_names, results, print_overall=False):
 
 def avg_results(all_dataset_names, results):
     all_bd_rates = {}
-    for method in sorted(list(results.keys())):
+    for method in sorted(results.keys()):
         for ds_name in all_dataset_names:
             if method not in all_bd_rates:
                 all_bd_rates[method] = []
@@ -182,7 +183,7 @@ def get_results(all_dataset_names, results, rotate=False, print_overall=False):
         all_dataset_names, results = rotate_results(all_dataset_names, results, print_overall)
 
     all_dataset_names = sorted([x for x in all_dataset_names if not x.startswith("*")])
-    all_method_names = sorted([x for x in results.keys() if not x.startswith("*")])
+    all_method_names = sorted([x for x in results if not x.startswith("*")])
 
     if print_overall and rotate:
         all_method_names += ["* Overall", "* Average"]
@@ -205,7 +206,7 @@ def print_results_different_metric(all_dataset_names, all_sequence_names, seq_re
         print("-" * 4, ds, "-" * 4)
         print_seq_results = {}
         avg_bd_rates = avg_results(all_sequence_names[ds], seq_results)
-        for m in sorted(list(results.keys())):
+        for m in sorted(results.keys()):
             if ds in results[m]:
                 print_seq_results[m] = {}
                 for seq in all_sequence_names[ds]:
@@ -327,7 +328,7 @@ class RDTester:
             create_folder(args.plot_path)
 
         self.base_method_name: str = base_method_name
-        self.log_paths: Dict[str, str] = log_paths
+        self.log_paths: dict[str, str] = log_paths
 
         self.compare_frame_type = args.compare_frame_type
         self.compare_between = args.compare_between
@@ -423,7 +424,7 @@ class RDTester:
                 data_dict[key_method][ds_name] = {}
                 data_dict[key_method][ds_name]["bpp"] = []
                 data_dict[key_method][ds_name][distortion_metric] = []
-                for _, one_data in json_dict[key_method][ds_name].items():
+                for one_data in json_dict[key_method][ds_name].values():
                     data_dict[key_method][ds_name]["bpp"].append(one_data[f"ave_{frame_type}_frame_bpp"])
                     val = one_data[f"ave_{frame_type}_frame_{distortion_metric}"]
                     if distortion_metric == "lpips":
@@ -478,7 +479,7 @@ class RDTester:
             self.results[distortion_metric] = {}
 
             cls_result_dict = mean_over_sequence(json_dict, distortion_metric)
-            all_dataset_names = sorted(list(self.ds_seq_names.keys()))
+            all_dataset_names = sorted(self.ds_seq_names.keys())
             all_sequence_names = {}
             if self.compare_between == "sequence":
                 if distortion_metric == "simple_vqa":
@@ -542,7 +543,7 @@ class RDTester:
 
         if self.compare_between == "sequence":
             names = []
-            for _, value in all_sequence_names.items():
+            for value in all_sequence_names.values():
                 names += value
         else:
             names = all_dataset_names
@@ -567,16 +568,16 @@ class RDTester:
         except ImportError:
             raise ImportError("saving plot data to CSV requires Pandas library")
         all_dfs = {}
-        models = sorted(list(frame_data.keys()))
+        models = sorted(frame_data.keys())
         for m in models:
             for d in frame_data[m]:
                 if d + "_all_frame" not in all_dfs:
-                    all_dfs[d + "_all_frame"] = pd.DataFrame(columns=[d + "_all_frame"])  # type: ignore[reportArgumentType]
+                    all_dfs[d + "_all_frame"] = pd.DataFrame(columns=[d + "_all_frame"])
                     all_dfs[d + "_all_frame"][d + "_all_frame"] = [x + 1 for x in range(max_num_bitrate)]
                 all_dfs[d + "_all_frame"][m + "_bpp"] = pd.Series(frame_data[m][d]["bpp"])
                 all_dfs[d + "_all_frame"][m + "_" + distortion_metric] = pd.Series(frame_data[m][d][distortion_metric])
 
-        for key, value in all_dfs.items():
+        for value in all_dfs.values():
             with open(self.output_plot_data, "a") as f:
                 value.to_csv(f)
 

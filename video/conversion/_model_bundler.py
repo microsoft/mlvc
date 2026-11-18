@@ -1,29 +1,31 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import os
-import gzip
-import onnx
-import shutil
-import hashlib
 import datetime
+import gzip
+import hashlib
+import os
+import shutil
 import tarfile
-import coremltools as ct
 from abc import ABC, abstractmethod
 from pathlib import Path
-from .const import DEFAULT_BUNDLE_DIR, get_default_target_device
+
+import coremltools as ct
+import onnx
+
 from ._scale_decoder import SCALE_DECODER_FILENAMES
+from .const import DEFAULT_BUNDLE_DIR, get_default_target_device
 from .types import (
+    BundleManifest,
     ConversionMetadata,
-    ModelType,
-    TargetDevice,
-    ModelPartId,
     MlvcVersion,
-    RegistryEntry,
     ModelManifest,
     ModelMetadata,
+    ModelPartId,
     ModelPartManifest,
-    BundleManifest,
+    ModelType,
+    RegistryEntry,
+    TargetDevice,
 )
 from .utils import get_model_type_extension
 
@@ -69,12 +71,12 @@ class BaseBundler(ABC):
 
         # Load all models and metadata
         conversion_metadata: dict[str, ConversionMetadata] = {}
-        metadata_files: dict[str, str] | dict[str, Path] = {}
-        gaussian_pmf_files: dict[str, str] | dict[str, Path] = {}
-        bit_estimator_pmf_files: dict[str, str] | dict[str, Path] = {}
+        metadata_files: dict[str, Path] = {}
+        gaussian_pmf_files: dict[str, Path] = {}
+        bit_estimator_pmf_files: dict[str, Path] = {}
         model_files: dict[tuple[str, ModelPartId], str | Path] = {}
-        scale_decoder_model_files: dict[str, str] | dict[str, Path] = {}
-        scale_decoder_weights_files: dict[str, str] | dict[str, Path] = {}
+        scale_decoder_model_files: dict[str, Path] = {}
+        scale_decoder_weights_files: dict[str, Path] = {}
         extension = get_model_type_extension(self._model_type)
 
         for model_path in model_paths:
@@ -189,7 +191,7 @@ class BaseBundler(ABC):
         return BundleManifest(
             bundle_name=self._bundle_name,
             mlvc_version=self._mlvc_version,
-            timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            timestamp=datetime.datetime.now(datetime.UTC).isoformat(),
             model_type=self._model_type,
             target_device=self._target_device,
             model_registry=model_registry,
@@ -209,7 +211,7 @@ class BaseBundler(ABC):
     def _bundle_json(self, input_files: dict[str, str] | dict[str, Path], output_path: Path | str) -> dict[str, Path]:
 
         # Check all input files have the same suffix
-        suffixes = set([Path(p).suffix for p in input_files.values()])
+        suffixes = {Path(p).suffix for p in input_files.values()}
         if len(suffixes) != 1:
             raise ValueError("All input files must have the same suffix")
         suffix = suffixes.pop()
@@ -237,8 +239,8 @@ class BaseBundler(ABC):
         if len(data_by_hash) == 0:
             pass
         elif len(data_by_hash) == 1:
-            stem = Path(list(input_files.values())[0]).stem
-            sha256 = list(data_by_hash.keys())[0]
+            stem = Path(next(iter(input_files.values()))).stem
+            sha256 = next(iter(data_by_hash.keys()))
             output_file = Path(output_path) / f"{stem}{suffix}"
             _save_file(sha256, output_file)
         elif len(data_by_hash) == len(input_files):
@@ -247,7 +249,7 @@ class BaseBundler(ABC):
                 output_file = Path(output_path) / f"{Path(input_file).stem}_{name}{suffix}"
                 _save_file(sha256, output_file)
         else:
-            stem = Path(list(input_files.values())[0]).stem
+            stem = Path(next(iter(input_files.values()))).stem
             for sha256, data_bytes in data_by_hash.items():
                 output_file = Path(output_path) / f"{stem}{sha256}{suffix}"
                 _save_file(sha256, output_file)
@@ -449,10 +451,12 @@ def _create_tar(
     suffix = ".tar.gz" if gzip_compress else ".tar"
     archive_path = directory_path.parent / f"{directory_path.name}{suffix}"
     if gzip_compress:
-        with open(archive_path, "wb") as archive_file:
-            with gzip.GzipFile(filename="", mode="wb", fileobj=archive_file, mtime=source_date_epoch) as gzip_file:
-                with tarfile.open(fileobj=gzip_file, mode="w", format=tarfile.USTAR_FORMAT) as tar:
-                    _add_members(tar)
+        with (
+            open(archive_path, "wb") as archive_file,
+            gzip.GzipFile(filename="", mode="wb", fileobj=archive_file, mtime=source_date_epoch) as gzip_file,
+            tarfile.open(fileobj=gzip_file, mode="w", format=tarfile.USTAR_FORMAT) as tar,
+        ):
+            _add_members(tar)
     else:
         with tarfile.open(archive_path, "w", format=tarfile.USTAR_FORMAT) as tar:
             _add_members(tar)

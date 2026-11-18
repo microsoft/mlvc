@@ -2,8 +2,8 @@
 # Licensed under the MIT license.
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 __all__ = ["OpticFlowLoss"]
 

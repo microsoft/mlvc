@@ -9,43 +9,43 @@ import random
 import re
 import sys
 from collections import defaultdict
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Optional, Mapping, Sequence, Dict, Any, BinaryIO, Tuple, Iterable, List
-from unittest.mock import patch
 from functools import cached_property
+from typing import Any, BinaryIO
+from unittest.mock import patch
 
 import numpy as np
 import torch
-import torch.nn as nn
-from torch import optim
+from torch import nn, optim
 
 from .retry import retry
 
 __all__ = [
-    "get_training_lambdas",
-    "ddp_sync_state_dict",
+    "AuxiliaryModels",
+    "GradNormTracker",
+    "apply_type_annotations_to_config",
+    "apply_type_annotations_to_config_value",
+    "avg_per_rate",
+    "compare_test_with_anchor",
+    "configure_logging",
+    "create_folder",
+    "create_metrics_writer",
     "ddp_sync_model",
     "ddp_sync_optimizer",
-    "avg_per_rate",
-    "create_folder",
+    "ddp_sync_state_dict",
+    "dump_json",
+    "get_average_bd_rates",
+    "get_optimizer",
+    "get_training_lambdas",
+    "multiprocessing_init",
+    "read_epoch_marker",
     "remove_nan_grad",
     "remove_nan_grad_and_clamp",
-    "dump_json",
-    "configure_logging",
-    "multiprocessing_init",
-    "apply_type_annotations_to_config_value",
-    "apply_type_annotations_to_config",
     "set_config_value_by_path",
     "sync_random_seed",
-    "create_metrics_writer",
-    "write_epoch_marker",
-    "read_epoch_marker",
-    "compare_test_with_anchor",
-    "get_average_bd_rates",
     "write_bd_rate_to_file",
-    "get_optimizer",
-    "GradNormTracker",
-    "AuxiliaryModels",
+    "write_epoch_marker",
 ]
 
 
@@ -177,12 +177,12 @@ def downsample_mask(mask, factor: int):
 
 # New method version to replace obsolete, when code conversion completes
 def ddp_sync_state_dict(state_dict):
-    wait_list = list()
+    wait_list = []
 
     bcast_device = None
     if torch.distributed.get_backend() == torch.distributed.Backend.NCCL:
         bcast_device = torch.device("cuda", torch.cuda.current_device())
-    sync_list = list()
+    sync_list = []
 
     def process_dict(obj: dict):
         for _, value in sorted(obj.items()):
@@ -246,22 +246,20 @@ def remove_nan_grad_and_clamp(parameters, max_value):
 @patch("json.encoder.c_make_encoder", None)
 def dump_json(obj, fid, float_digits=-1, **kwargs):
     # noinspection PyProtectedMember
-    of = json.encoder._make_iterencode  # type: ignore[attr-defined]  # pylint: disable=W0212
+    of = json.encoder._make_iterencode  # ty: ignore[missing-attribute]  # pylint: disable=W0212
 
     # noinspection PyShadowingNames
     def inner(*args, **kwargs):
         args = list(args)
         # fifth argument is float formater which we will replace
-        args[4] = lambda o: format(o, ".%df" % float_digits)
+        args[4] = lambda o: format(o, f".{float_digits}f")
         return of(*args, **kwargs)
 
     with patch("json.encoder._make_iterencode", wraps=inner):
         json.dump(obj, fid, **kwargs)
 
 
-def configure_logging(
-    *, level: Optional[int] = None, log_format: Optional[str] = None, file_name: Optional[str] = None
-):
+def configure_logging(*, level: int | None = None, log_format: str | None = None, file_name: str | None = None):
     if log_format is None:
         log_format = "%(asctime)s P%(process)05d %(levelname).1s: %(message)s"
 
@@ -353,7 +351,7 @@ def apply_type_annotations_to_config(value):
         return value
 
 
-def set_config_value_by_path(config: Dict[str, Any], name, value, *, overwrite: bool = True):
+def set_config_value_by_path(config: dict[str, Any], name, value, *, overwrite: bool = True):
     """
     Set value in structured config by path
     """
@@ -361,7 +359,7 @@ def set_config_value_by_path(config: Dict[str, Any], name, value, *, overwrite: 
     for idx, n in enumerate(name_list[:-1]):
         subconfig = config.get(n, None)
         if subconfig is None:
-            config[n] = subconfig = dict()
+            config[n] = subconfig = {}
         elif not isinstance(subconfig, dict):
             raise ValueError(f"Config does not have an object with path {'.'.join(name_list[: idx + 1])}")
 
@@ -391,7 +389,7 @@ def create_metrics_writer(rank: int = -1):
 
 
 @retry
-def write_epoch_marker(filename: str, epoch: int, *, is_first_checkpoint: Optional[bool] = None):
+def write_epoch_marker(filename: str, epoch: int, *, is_first_checkpoint: bool | None = None):
     if is_first_checkpoint is None:
         is_first_checkpoint = epoch == 0
     mode = "wb" if is_first_checkpoint else "rb+"
@@ -404,14 +402,13 @@ def write_epoch_marker(filename: str, epoch: int, *, is_first_checkpoint: Option
 @retry
 def read_epoch_marker(filename: str):
     try:
-        f = open(filename, "rb")
+        with open(filename, "rb") as f:
+            data = np.frombuffer(f.read(), np.int64)
     except FileNotFoundError:
         return None
 
-    with f:
-        data = np.frombuffer(f.read(), np.int64)
-        assert data.shape == (1,)
-        return int(data[0])
+    assert data.shape == (1,)
+    return int(data[0])
 
 
 def compare_test_with_anchor(
@@ -478,7 +475,7 @@ class BDRateResult:
 
 def get_average_bd_rates(log_path):
     # List of lines with metric -> frame_type -> method -> dataset -> average bd rate
-    data: List[Dict[str, Dict[str, Dict[str, Dict[str, float]]]]] = []
+    data: list[dict[str, dict[str, dict[str, dict[str, float]]]]] = []
     with open(log_path, "r") as f:
         for line in f:
             data.append(json.loads(line))
@@ -491,7 +488,7 @@ def get_average_bd_rates(log_path):
                 epoch = get_epoch_number(method)
                 bd_rate_sum = 0
                 bd_rate_count = 0
-                for _, bd_rate in method_results.items():
+                for bd_rate in method_results.values():
                     bd_rate_sum += bd_rate
                     bd_rate_count += 1
                 avg_bd_rate = bd_rate_sum / bd_rate_count
@@ -513,20 +510,20 @@ class GradNormTracker:
     def __init__(
         self,
         *,
-        total_l2_norm_limit: Optional[float] = None,
+        total_l2_norm_limit: float | None = None,
         parameter_initial_norm,
         parameter_norm_limit_factor: float = 5.0,
         parameter_norm_alpha: float = 0.05,
         parameter_norm_min_ratio: float = 0.0,
-        parameter_exclude_list: Optional[Sequence[str]] = None,
+        parameter_exclude_list: Sequence[str] | None = None,
     ):
         if total_l2_norm_limit is not None:
             if not isinstance(total_l2_norm_limit, numbers.Real) or total_l2_norm_limit <= 0:
                 raise ValueError(f"Invalid total_l2_norm_limit value: {total_l2_norm_limit}")
 
-            self.total_l2_norm_limit: Optional[torch.Tensor] = torch.tensor(total_l2_norm_limit, dtype=torch.float64)
+            self.total_l2_norm_limit: torch.Tensor | None = torch.tensor(total_l2_norm_limit, dtype=torch.float64)
         else:
-            self.total_l2_norm_limit: Optional[torch.Tensor] = None
+            self.total_l2_norm_limit: torch.Tensor | None = None
 
         if not isinstance(parameter_initial_norm, numbers.Real) or parameter_initial_norm <= 0:
             raise ValueError(f"Invalid parameter_initial_norm value: {parameter_initial_norm}")
@@ -544,15 +541,15 @@ class GradNormTracker:
             raise ValueError(f"Invalid parameter_norm_min_ratio value: {parameter_norm_min_ratio}")
         self.parameter_norm_min_ratio = float(parameter_norm_min_ratio)
 
-        self.parameter_exclude_list = tuple(parameter_exclude_list) if parameter_exclude_list is not None else tuple()
+        self.parameter_exclude_list = tuple(parameter_exclude_list) if parameter_exclude_list is not None else ()
 
-        self.parameter_map = dict()
+        self.parameter_map = {}
         self.parameter_running_norm = None
-        self.parameter_mask: Optional[torch.Tensor] = None
-        self.history = list()
+        self.parameter_mask: torch.Tensor | None = None
+        self.history = []
 
     @torch.no_grad()
-    def track_and_clip_(self, parameters: Iterable[Tuple[str, nn.Parameter]]):
+    def track_and_clip_(self, parameters: Iterable[tuple[str, nn.Parameter]]):
         gradients, running_norm, grad_norm, weight_norm = self._collect_grad_norms(parameters)
         if len(gradients) == 0:
             return 0.0, 1.0
@@ -606,13 +603,13 @@ class GradNormTracker:
         return l2_norm_value, scale_value
 
     def _collect_grad_norms(
-        self, parameters: Iterable[Tuple[str, nn.Parameter]]
-    ) -> Tuple[list, Optional[torch.Tensor], torch.Tensor, Optional[torch.Tensor]]:
+        self, parameters: Iterable[tuple[str, nn.Parameter]]
+    ) -> tuple[list, torch.Tensor | None, torch.Tensor, torch.Tensor | None]:
         parameter_map = self.parameter_map
-        gradients = list()
-        norms = list()
-        weight_norms = list() if self.parameter_norm_min_ratio > 0 else None
-        indices = list()
+        gradients = []
+        norms = []
+        weight_norms = [] if self.parameter_norm_min_ratio > 0 else None
+        indices = []
 
         new_params = None
         running_norm = self.parameter_running_norm
@@ -638,7 +635,7 @@ class GradNormTracker:
 
             if idx >= parameter_count:
                 if new_params is None:
-                    new_params = list()
+                    new_params = []
 
                 new_params.append((idx, p))
 
@@ -705,10 +702,10 @@ class GradNormTracker:
         self.history.clear()
 
     def state_dict(self):
-        return dict(
-            parameter_map=self.parameter_map,
-            parameter_running_norm=self.parameter_running_norm,
-        )
+        return {
+            "parameter_map": self.parameter_map,
+            "parameter_running_norm": self.parameter_running_norm,
+        }
 
     def load_state_dict(self, state_dict):
         self.parameter_map = dict(state_dict["parameter_map"])

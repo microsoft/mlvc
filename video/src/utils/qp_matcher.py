@@ -4,7 +4,8 @@
 import itertools
 import json
 import re
-from typing import Dict, Any, Iterable, List, Tuple
+from collections.abc import Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ def _create_bitrate_anchor(
     else:
         records = []
         for key, _ in candidates.groupby(["ds_name", "video_path"]):
-            ds_name, video_path = key  # type: ignore[misc]
+            ds_name, video_path = key  # ty: ignore[not-iterable]
             vid_path_norm = re.sub(r"_(\d+)x(\d+)_", "_", str(video_path))
             for i, kbit in enumerate(anchor_kbits):
                 records.append(
@@ -37,7 +38,7 @@ def _create_bitrate_anchor(
 
 
 def _read_metrics(
-    metrics: str | Dict[str, Any], scenarios: None | str | Iterable[str] = None, group: bool = True
+    metrics: str | dict[str, Any], scenarios: None | str | Iterable[str] = None, group: bool = True
 ) -> pd.DataFrame:
     if isinstance(metrics, dict):
         metrics_ = metrics
@@ -51,8 +52,7 @@ def _read_metrics(
     def list_all(m):
         for d in m.values():
             for s in d.values():
-                for q in s.values():
-                    yield q
+                yield from s.values()
 
     columns = ["ds_name", "video_path", "i_frame_q_index", "p_frame_q_index", "frame_pixel_num", "ave_all_frame_bpp"]
     df = pd.DataFrame.from_records(list_all(metrics_), columns=columns)
@@ -70,7 +70,7 @@ def _read_metrics(
                 "bits_per_frame": df.frame_pixel_num * df.ave_all_frame_bpp,
             }
         )
-        df = df.groupby("q_index").mean().reset_index()  # type: ignore[union-attr]
+        df = df.groupby("q_index").mean().reset_index()
     else:
         # Remove resolution information so that matched QPs work for decoder_metrics as well
         df["video_path"] = [re.sub(r"_(\d+)x(\d+)_", "_", p) for p in df.video_path]
@@ -79,7 +79,7 @@ def _read_metrics(
     return df
 
 
-def _apply_min_distance(q_index_list: List[Tuple[int, int]], min_distance: int) -> List[Tuple[int, int]]:
+def _apply_min_distance(q_index_list: list[tuple[int, int]], min_distance: int) -> list[tuple[int, int]]:
     if min_distance > 0 and len(q_index_list) > 1:
 
         def distance(x, y):
@@ -92,10 +92,10 @@ def _apply_min_distance(q_index_list: List[Tuple[int, int]], min_distance: int) 
 
 def match_q_index_lists(
     *,
-    candidate_metrics: str | Dict[str, Any],
+    candidate_metrics: str | dict[str, Any],
     scenarios: None | str | Iterable[str] = None,
     anchor_kbits: None | Iterable[int] = None,
-    anchor_metrics: None | str | Dict[str, Any] = None,
+    anchor_metrics: None | str | dict[str, Any] = None,
     anchor_q_index_list: Iterable[int] | None = None,
     min_distance: int = 0,
     match_per_video: bool = False,

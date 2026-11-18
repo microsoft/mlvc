@@ -10,8 +10,11 @@
 import logging
 from collections import namedtuple
 from typing import cast
+
 import torch
-from torchvision import models as tv  # type: ignore[reportMissingImports]
+from torchvision import models as tv
+
+VggOutputs = namedtuple("VggOutputs", ["relu1_2", "relu2_2", "relu3_3", "relu4_3", "relu5_3"])
 
 
 class vgg16(torch.nn.Module):
@@ -26,7 +29,7 @@ class vgg16(torch.nn.Module):
 
         weights = None
         if pretrained is True:
-            from torchvision.models.vgg import VGG16_Weights  # type: ignore[reportMissingImports]
+            from torchvision.models.vgg import VGG16_Weights
 
             weights = VGG16_Weights.DEFAULT
 
@@ -67,7 +70,6 @@ class vgg16(torch.nn.Module):
         h_relu4_3 = h
         h = self.slice5(h)
         h_relu5_3 = h
-        vgg_outputs = namedtuple("VggOutputs", ["relu1_2", "relu2_2", "relu3_3", "relu4_3", "relu5_3"])
-        out = vgg_outputs(h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3, h_relu5_3)
+        out = VggOutputs(h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3, h_relu5_3)
 
         return out

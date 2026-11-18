@@ -23,7 +23,7 @@ def _write_sequence(root, size, value):
         Image.fromarray(image[:, :, 1]).save(root / f"{name}_mask.png")
     path = root / "description.json"
     path.write_text(
-        json.dumps([dict(path=".", seq_length=2, width=width, height=height, frames=["0.png", "1.png"])]),
+        json.dumps([{"path": ".", "seq_length": 2, "width": width, "height": height, "frames": ["0.png", "1.png"]}]),
         encoding="utf-8",
     )
     return path, Image.fromarray(image)
@@ -202,3 +202,16 @@ def test_target_shape_error_precedes_padding(make_dataset, monkeypatch):
     monkeypatch.setattr(dataset, "_load_seq_frames_sync", load_short_target)
     with pytest.raises(ValueError, match="Target shape .* differs from input shape"):
         dataset[0]
+
+
+def test_random2_defaults_to_uniform_frame_distance(tmp_path):
+    source, _ = _write_sequence(tmp_path / "input", (64, 64), 50)
+    dataset = FastVideoFolder(str(source), 32, 32, frame_num=2, frame_selection="random2", max_frame_distance=3)
+
+    assert isinstance(dataset.frame_distance, tuple)
+    values, distribution = dataset.frame_distance
+    assert values.tolist() == [1, 2, 3]
+    torch.testing.assert_close(distribution.probs, torch.full((3,), 1 / 3))
+    for _ in range(20):
+        first, second = dataset._sample_frame_indices_random2(10).tolist()
+        assert 1 <= abs(second - first) <= 3

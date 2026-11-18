@@ -6,8 +6,8 @@ from . import functional as F_transforms
 __all__ = [
     "RGB2YCbCr",
     "YCbCr2RGB",
-    "YUV444To420",
     "YUV420To444",
+    "YUV444To420",
 ]
 
 

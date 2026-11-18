@@ -7,11 +7,11 @@ import dataclasses
 import logging
 import os
 import time
+from collections.abc import Sequence
 from functools import cached_property
-from typing import Sequence, List
 
-import PIL.Image
 import numpy as np
+import PIL.Image
 
 from src.datasets.ffmpeg_dataset import FfmpegDataset
 from src.transforms.functional import ycbcr444_to_rgb
@@ -42,7 +42,7 @@ class SequenceInfo:
 @dataclasses.dataclass
 class ClipRecord:
     clip_info: ClipInfo
-    sequences: List[SequenceInfo] = dataclasses.field(default_factory=list)
+    sequences: list[SequenceInfo] = dataclasses.field(default_factory=list)
 
 
 class FrameSequenceExtractorApp(BaseApp):
@@ -59,7 +59,7 @@ class FrameSequenceExtractorApp(BaseApp):
             try:
                 processed_clip_file.close()
             except BaseException:
-                logging.error("Exception closing processed clip list", exc_info=True)
+                logging.exception("Exception closing processed clip list")
 
         super().close()
 
@@ -117,12 +117,12 @@ class FrameSequenceExtractorApp(BaseApp):
         process_count = min(process_count, len(clip_list))
         logging.info(f"Running {process_count} ffmpeg processes in parallel")
 
-        task_kwargs = dict(
-            source_dir=self.source_dir,
-            output_dir=self.output_dir,
-            compression_quality=self.compression_quality,
-            lossless_compression=self.lossless_compression,
-        )
+        task_kwargs = {
+            "source_dir": self.source_dir,
+            "output_dir": self.output_dir,
+            "compression_quality": self.compression_quality,
+            "lossless_compression": self.lossless_compression,
+        }
 
         self._last_progress_time = time.time()
         if process_count <= 1:
@@ -148,7 +148,7 @@ class FrameSequenceExtractorApp(BaseApp):
         filename = self.get_config_by_path("frame_sequence_extractor.frame_sequences_csv", expected_type=str)
         filename = self.resolve_path(filename, default_source=".")
 
-        clip_record_map = dict()
+        clip_record_map = {}
 
         start, end = self._get_sequence_range()
         with open(filename, "rt", encoding="utf-8") as f:
@@ -203,7 +203,7 @@ class FrameSequenceExtractorApp(BaseApp):
 
         raise ValueError(f"Invalid sequence range: {sequence_range}")
 
-    def _filter_processed_clips(self, clip_list: List[ClipRecord]):
+    def _filter_processed_clips(self, clip_list: list[ClipRecord]):
         processed_clip_list = self._load_processed_clip_list()
         if len(processed_clip_list) == 0:
             return clip_list
@@ -218,28 +218,26 @@ class FrameSequenceExtractorApp(BaseApp):
             "frame_sequence_extractor.auto_restart", expected_type=bool, default=True
         )
 
-        if auto_restart:
-            if self.processed_clip_list_filename:
-                try:
-                    file = open(self.processed_clip_list_filename, "rt", encoding="utf-8")
-                    with file:
-                        return [n.rstrip("\n") for n in file]
-                except FileNotFoundError:
-                    pass
+        if auto_restart and self.processed_clip_list_filename:
+            try:
+                with open(self.processed_clip_list_filename, "rt", encoding="utf-8") as file:
+                    return [n.rstrip("\n") for n in file]
+            except FileNotFoundError:
+                pass
 
         processed_clip_list = self.get_config_by_path(
             "frame_sequence_extractor.initial_processed_clip_list", expected_type=str, default=""
         )
         processed_clip_list = self.resolve_path(processed_clip_list, default_source="checkpoints_mount")
         if not processed_clip_list:
-            return list()
+            return []
 
         with open(processed_clip_list, "rt", encoding="utf-8") as file:
             clip_list = [n.rstrip("\n") for n in file]
 
         if len(clip_list) > 0 and self.processed_clip_list_filename:
             assert self._processed_clip_file is None
-            self._processed_clip_file = open(self.processed_clip_list_filename, "wt", encoding="utf-8")
+            self._processed_clip_file = open(self.processed_clip_list_filename, "wt", encoding="utf-8")  # noqa: SIM115 - kept open while clips are processed, closed in close()
             for filename in clip_list:
                 self._processed_clip_file.write(f"{filename}\n")
             self._processed_clip_file.flush()
@@ -248,7 +246,7 @@ class FrameSequenceExtractorApp(BaseApp):
 
     def _on_processed_clip(self, filename, idx, total):
         if self._processed_clip_file is None and self.processed_clip_list_filename:
-            self._processed_clip_file = open(self.processed_clip_list_filename, "wt", encoding="utf-8")
+            self._processed_clip_file = open(self.processed_clip_list_filename, "wt", encoding="utf-8")  # noqa: SIM115 - kept open while clips are processed, closed in close()
 
         if self._processed_clip_file is not None:
             self._processed_clip_file.write(f"{filename}\n")

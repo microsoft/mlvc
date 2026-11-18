@@ -7,7 +7,6 @@ import pytest
 
 from src.utils.model_factory import create_image_model, create_video_model
 
-
 IMAGE_MODELS = [
     {"type": "DMCI-6.0", "N": 128, "z_channel": 64},
 ]

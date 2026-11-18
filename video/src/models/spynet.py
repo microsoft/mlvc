@@ -2,11 +2,11 @@
 # Licensed under the MIT license.
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
-from .block_mc import block_mc_func
 from ..utils.model_compat_support import RenameModule_LoadHook
+from .block_mc import block_mc_func
 
 
 def bilinearupscaling(inputfeature):

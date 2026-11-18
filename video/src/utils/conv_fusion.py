@@ -2,7 +2,7 @@
 # Licensed under the MIT license.
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 def _subpel_params(subpel):

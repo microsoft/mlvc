@@ -9,7 +9,7 @@ replaces the scan with an index keyed by storage data pointer that returns the s
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 _PATCHED = False
 _INDEX_ATTR = "_mlvc_path_output_index"
@@ -39,7 +39,7 @@ def _get_path_output_index(node: Any) -> dict[int, list[tuple[int, int]]]:
 
 
 def _make_patched_methods(maybe_deref):
-    def is_alias_of_live_recorded_tensor(self, t) -> Optional[tuple[int, int]]:
+    def is_alias_of_live_recorded_tensor(self, t) -> tuple[int, int] | None:
         ptr = t.untyped_storage().data_ptr()
         levels = self.path_weakrefs
         for depth, output_index in _get_path_output_index(self).get(ptr, ()):

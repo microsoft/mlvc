@@ -1,12 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import os
 import json
+import os
 import random
+
 import numpy as np
 import torch
-
 from PIL import Image
 from torch.utils.data import Dataset
 

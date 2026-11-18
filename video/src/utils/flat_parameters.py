@@ -7,10 +7,11 @@ A submodule that a step does not use gets no gradient, so the optimizer skips it
 element of a top-level ModuleList or ModuleDict gets its own flat tensor, since models often select one per call.
 """
 
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 # Parameter offsets are aligned so that the views keep the alignment that vectorized CUDA kernels require.
 _ALIGNMENT = 32

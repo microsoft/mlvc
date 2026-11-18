@@ -1,18 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from typing import Iterable, Optional, Sequence
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 from torch.utils.data import Dataset
 
 
 class WeightedDataset(Dataset):
-    def __init__(self, datasets: Iterable[Dataset], weights: Optional[Sequence[float]], length: Optional[int] = None):
+    def __init__(self, datasets: Iterable[Dataset], weights: Sequence[float] | None, length: int | None = None):
         self.datasets = tuple(datasets)
         # noinspection PyTypeChecker
         self.lengths = np.fromiter(
-            (len(dataset) for dataset in self.datasets),  # type: ignore[arg-type]
+            (len(dataset) for dataset in self.datasets),  # ty: ignore[invalid-argument-type]
             count=len(self.datasets),
             dtype=np.int32,
         )

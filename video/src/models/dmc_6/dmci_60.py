@@ -6,15 +6,15 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...utils.stream_helper import (
+    check_decoder_eof,
+    flush_encoder_streams,
+    get_downsampled_shape,
+    open_decoder_streams,
+    open_encoder_streams,
+)
 from ..common_model import CompressionModel
 from .layers import DepthConvBlock, ResidualBlockUpsample, ResidualBlockWithStride2
-from ...utils.stream_helper import (
-    get_downsampled_shape,
-    open_encoder_streams,
-    flush_encoder_streams,
-    open_decoder_streams,
-    check_decoder_eof,
-)
 
 g_ch_src = 3 * 8 * 8
 g_ch_enc_dec = 368
@@ -204,10 +204,10 @@ class DMCI(CompressionModel):
 
         bit_stream = flush_encoder_streams(streams)
 
-        result = dict(
-            x_hat=x_hat,
-            bit_stream=bit_stream,
-        )
+        result = {
+            "x_hat": x_hat,
+            "bit_stream": bit_stream,
+        }
 
         if calc_bits_estimates:
             bits_y = self.get_y_bits_estimate(y_raw)
@@ -251,4 +251,4 @@ class DMCI(CompressionModel):
         del streams
 
         x_hat = self.dec(y_hat, curr_q_dec).clamp_(0, 1)
-        return dict(x_hat=x_hat)
+        return {"x_hat": x_hat}

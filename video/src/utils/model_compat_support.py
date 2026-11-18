@@ -1,7 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from typing import Dict
 
 import torch.nn
 
@@ -9,7 +8,7 @@ __all__ = ["RenameModule_LoadHook"]
 
 
 class RenameModule_LoadHook:
-    def __init__(self, rename_map: Dict[str, str]):
+    def __init__(self, rename_map: dict[str, str]):
         self.rename_map = rename_map
 
     def register(self, module: torch.nn.Module):
@@ -18,9 +17,9 @@ class RenameModule_LoadHook:
 
     def __call__(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
 
-        source_keys = dict()
+        source_keys = {}
         start = len(prefix)
-        for key in state_dict.keys():
+        for key in state_dict:
             if not key.startswith(prefix):
                 continue
 
@@ -34,7 +33,7 @@ class RenameModule_LoadHook:
 
             key_list = source_keys.get(old_name)
             if key_list is None:
-                source_keys[old_name] = key_list = list()
+                source_keys[old_name] = key_list = []
 
             key_list.append(key)
 

@@ -1,19 +1,21 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import sys
-import pytest
 import platform
+import sys
 from pathlib import Path
-from conversion.types import ModelType
+
+import pytest
+
 from conversion import (
-    load_split_model,
-    full_model_factory,
-    split_full_model,
-    exporter_factory,
-    aggregate_frame_loop_results,
     FrameLoop,
+    aggregate_frame_loop_results,
+    exporter_factory,
+    full_model_factory,
+    load_split_model,
+    split_full_model,
 )
+from conversion.types import ModelType
 
 _TEST_DATA = []
 

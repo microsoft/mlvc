@@ -2,7 +2,6 @@
 # Licensed under the MIT license.
 
 import subprocess
-from typing import Optional
 
 import numpy as np
 import scipy.ndimage
@@ -12,7 +11,7 @@ from src.utils.os import set_pipe_buffer_size
 
 
 class FfmpegIterator:
-    def __init__(self, video_path, *, width, height, dst_format: str = "444", ffmpeg_error_mode: Optional[str] = None):
+    def __init__(self, video_path, *, width, height, dst_format: str = "444", ffmpeg_error_mode: str | None = None):
         if dst_format not in ("444", "420"):
             raise ValueError(f"Unsupported decoded video format {dst_format}")
 
@@ -82,7 +81,7 @@ class FfmpegIterator:
             try:
                 rc = ffmpeg.wait(60)
             except subprocess.TimeoutExpired:
-                raise IOError(f"{self.video_path}: ffmpeg failed to terminate cleanly")
+                raise OSError(f"{self.video_path}: ffmpeg failed to terminate cleanly")
 
             if check and rc != 0:
                 if self.ffmpeg_error_mode == "ignore":
@@ -96,10 +95,9 @@ class FfmpegIterator:
 
                         logging.warning(error)
                     else:
-                        raise IOError(error)
+                        raise OSError(error)
         finally:
             ffmpeg.kill()
-            pass
 
     def __iter__(self):
         return self
@@ -125,7 +123,7 @@ class FfmpegIterator:
 
 
 class FfmpegDataset(torch.utils.data.IterableDataset):
-    def __init__(self, video_path, width, height, dst_format: str = "444", ffmpeg_error_mode: Optional[str] = None):
+    def __init__(self, video_path, width, height, dst_format: str = "444", ffmpeg_error_mode: str | None = None):
         super().__init__()
         self.video_path = video_path
         self.width = width
