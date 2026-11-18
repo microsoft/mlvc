@@ -1,42 +1,43 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import re
 import json
+import re
 import time
-from tqdm import tqdm
-from typing import Any
-from pathlib import Path
 from dataclasses import dataclass
-from azure.core.exceptions import ResourceNotFoundError
+from pathlib import Path
+from typing import Any
 
+from azure.core.exceptions import ResourceNotFoundError
+from tqdm import tqdm
+
+from ._frame_loop import FrameLoop, aggregate_frame_loop_results
+from ._model_profile import aggregate_op_profile, profile_coreml_model
+from ._powermetrics import PowerMetricsCollector
+from ._split_model import BaseSplitModel
 from .const import (
-    DEFAULT_JOB_OUTPUTS_DIR,
-    DEFAULT_TEST_DATA_DIR,
     DEFAULT_BENCHMARK_FRAME_COUNT,
-    DEFAULT_TEST_CONFIG_PATH,
+    DEFAULT_JOB_OUTPUTS_DIR,
     DEFAULT_NUM_CLIPS_LIMIT,
+    DEFAULT_TEST_CONFIG_PATH,
+    DEFAULT_TEST_DATA_DIR,
     DEFAULT_TEST_Q_INDEX_LIST,
     get_default_test_video,
 )
-from .utils import download_test_data, download_job_outputs
 from .types import (
-    ModelType,
+    AggregatedMetric,
+    BenchmarkResults,
+    ConversionMetadata,
+    FrameLoopParams,
+    FrameLoopSummary,
     ModelPartId,
     ModelProfile,
-    ConversionMetadata,
-    FrameLoopSummary,
-    FrameLoopParams,
-    ValidateConversionResults,
+    ModelType,
     ProfileResults,
-    BenchmarkResults,
+    ValidateConversionResults,
     ValidationTestResults,
-    AggregatedMetric,
 )
-from ._split_model import BaseSplitModel
-from ._powermetrics import PowerMetricsCollector
-from ._frame_loop import FrameLoop, aggregate_frame_loop_results
-from ._model_profile import profile_coreml_model, aggregate_op_profile
+from .utils import download_job_outputs, download_test_data
 
 
 class ModelTester:
@@ -165,7 +166,8 @@ class ModelTester:
         num_clips_limit: int = DEFAULT_NUM_CLIPS_LIMIT,
         q_index_list: list[int] | None = None,
         bitrate_list: list[float] | None = None,
-        clip_bitrate_list_overrides: dict[tuple[str, str], list[float]] = {},  # [scenario, video_name] -> [bitrates]
+        clip_bitrate_list_overrides: dict[tuple[str, str], list[float]]
+        | None = None,  # [scenario, video_name] -> [bitrates]
         use_encoder: bool = True,
         use_decoder: bool = True,
         save_values: bool = True,
@@ -174,6 +176,8 @@ class ModelTester:
         **kwargs,
     ) -> ValidationTestResults:
 
+        if clip_bitrate_list_overrides is None:
+            clip_bitrate_list_overrides = {}
         test_clips = _load_test_config(
             test_config=test_config,
             scenarios_list=scenarios_list,

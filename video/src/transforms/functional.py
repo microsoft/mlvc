@@ -1,13 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from typing import Literal, Tuple, Union, overload
+from typing import Literal, overload
 
 import numpy as np
 import scipy.ndimage
 import torch
 import torch.nn.functional as F
-
 from torch import Tensor
 
 YCBCR_WEIGHTS = {
@@ -146,7 +145,7 @@ def rgb_to_ycbcr(rgb):
     input is 3xhxw RGB float numpy array, in the range of [0, 1]
     output is yuv: 3xhxw, in the range of [0, 1]
     """
-    c, h, w = rgb.shape
+    c, _h, _w = rgb.shape
     assert c == 3
     r, g, b = np.split(rgb, 3, axis=0)
     Kr, Kg, Kb = YCBCR_WEIGHTS["ITU-R_BT.709"]
@@ -239,9 +238,9 @@ def ycbcr2rgb(ycbcr: Tensor) -> Tensor:
 
 
 def yuv_444_to_420(
-    yuv: Union[Tensor, Tuple[Tensor, Tensor, Tensor]],
+    yuv: Tensor | tuple[Tensor, Tensor, Tensor],
     mode: str = "avg_pool",
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Convert a 444 tensor to a 420 representation.
 
     Args:
@@ -272,7 +271,7 @@ def yuv_444_to_420(
 
 @overload
 def yuv_420_to_444(
-    yuv: Tuple[Tensor, Tensor, Tensor],
+    yuv: tuple[Tensor, Tensor, Tensor],
     mode: str = ...,
     return_tuple: Literal[False] = ...,
 ) -> Tensor: ...
@@ -280,17 +279,17 @@ def yuv_420_to_444(
 
 @overload
 def yuv_420_to_444(
-    yuv: Tuple[Tensor, Tensor, Tensor],
+    yuv: tuple[Tensor, Tensor, Tensor],
     mode: str = ...,
     return_tuple: Literal[True] = ...,
-) -> Tuple[Tensor, Tensor, Tensor]: ...
+) -> tuple[Tensor, Tensor, Tensor]: ...
 
 
 def yuv_420_to_444(
-    yuv: Tuple[Tensor, Tensor, Tensor],
+    yuv: tuple[Tensor, Tensor, Tensor],
     mode: str = "bilinear",
     return_tuple: bool = False,
-) -> Union[Tensor, Tuple[Tensor, Tensor, Tensor]]:
+) -> Tensor | tuple[Tensor, Tensor, Tensor]:
     """Convert a 420 input to a 444 representation.
 
     Args:

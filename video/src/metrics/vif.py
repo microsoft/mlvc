@@ -13,15 +13,14 @@
 # - Added per-scale outputs
 # - Made number of scales configurable
 
-from typing import Optional, Union
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 
 
 def gaussian_filter(
-    kernel_size: int, sigma: float, device: Optional[str] = None, dtype: Optional[torch.dtype] = None
+    kernel_size: int, sigma: float, device: str | None = None, dtype: torch.dtype | None = None
 ) -> torch.Tensor:
     coords = torch.arange(kernel_size, dtype=dtype, device=device)
     coords -= (kernel_size - 1) / 2.0
@@ -36,7 +35,7 @@ def gaussian_filter(
 class VIF(nn.Module):
     EPSILON = 1e-8
 
-    def __init__(self, data_range: Union[int, float] = 1.0, sigma_n_sq: float = 2.0, num_scales: int = 2):
+    def __init__(self, data_range: float = 1.0, sigma_n_sq: float = 2.0, num_scales: int = 2):
         super().__init__()
 
         self.data_range = data_range

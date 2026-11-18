@@ -12,17 +12,18 @@ import contextlib
 import dataclasses
 import gc
 import logging
-from typing import Any, Callable, Iterable, Iterator, Mapping, Optional, overload
+from collections.abc import Callable, Generator, Iterable, Mapping
+from typing import Any, overload
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 _UNSET = object()
 
 SKIP_GUARD_EVAL_AFTER_STEPS_KEY = "train.compile_skip_guard_eval_after_steps"
 
 
-def _lookup(config: Optional[Mapping], key_path: str, default: Any = None) -> Any:
+def _lookup(config: Mapping | None, key_path: str, default: Any = None) -> Any:
     value: Any = config
     for component in key_path.split("."):
         if not isinstance(value, Mapping):
@@ -33,7 +34,7 @@ def _lookup(config: Optional[Mapping], key_path: str, default: Any = None) -> An
     return value
 
 
-def _typed(config: Optional[Mapping], key_path: str, default: Any, expected_type) -> Any:
+def _typed(config: Mapping | None, key_path: str, default: Any, expected_type) -> Any:
     value = _lookup(config, key_path, default)
     if not isinstance(value, expected_type):
         raise ValueError(f"Config value {key_path} is {type(value)}, while {expected_type} is expected")
@@ -54,8 +55,8 @@ class CompileSettings:
     enabled: bool = True
     backend: str = "inductor"
     # from_config defaults this to "reduce-overhead" for inductor without options.
-    mode: Optional[str] = None
-    options: Optional[dict] = None
+    mode: str | None = None
+    options: dict | None = None
     fullgraph: bool = True
     # Static shapes; callers normalize input strides (see with_standard_strides) to avoid recompiles.
     dynamic: bool = False
@@ -67,7 +68,7 @@ class CompileSettings:
             raise ValueError(f"{self.MODE_KEY} and {self.OPTIONS_KEY} cannot both be set (torch.compile limitation)")
 
     @classmethod
-    def from_config(cls, config: Optional[Mapping]) -> "CompileSettings":
+    def from_config(cls, config: Mapping | None) -> "CompileSettings":
         """Parses settings from the root app config (the mapping that contains ``train``)."""
         enabled = _typed(config, cls.ENABLED_KEY, True, bool)
         backend = _typed(config, cls.BACKEND_KEY, "inductor", str)
@@ -115,7 +116,7 @@ def with_standard_strides(tensor: torch.Tensor) -> torch.Tensor: ...
 def with_standard_strides(tensor: None) -> None: ...
 
 
-def with_standard_strides(tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+def with_standard_strides(tensor: torch.Tensor | None) -> torch.Tensor | None:
     """Returns tensor with row-major strides, copying only when its strides differ.
 
     Frame views such as ``videos[:, i]`` keep ``stride(0) == n_frames * C * H * W``. torch.compile guards
@@ -184,7 +185,7 @@ class TorchCompileManager:
 
     def __init__(
         self,
-        config: Callable[[], Optional[Mapping]],
+        config: Callable[[], Mapping | None],
         device: Callable[[], torch.device],
         rank: Callable[[], int] = lambda: 0,
         extra_reset_keys: Iterable[str] = (),
@@ -229,7 +230,7 @@ class TorchCompileManager:
     def reset(self):
         reset_compiler(self._device(), self._rank())
 
-    def on_config_changed(self, change_set: Mapping[str, bool], model: Optional[nn.Module]) -> bool:
+    def on_config_changed(self, change_set: Mapping[str, bool], model: nn.Module | None) -> bool:
         """Resets caches and recompiles (or disables compilation of) ``model`` when a reset key changed.
 
         Returns True when a reset happened.
@@ -253,7 +254,7 @@ class TorchCompileManager:
         return True
 
     @contextlib.contextmanager
-    def eval_scope(self, free_cudagraph_pools: bool = False) -> Iterator[None]:
+    def eval_scope(self, free_cudagraph_pools: bool = False) -> Generator[None, None, None]:
         """Runs compiled modules eagerly; optionally frees CUDA graph pools first to make room for large eval models."""
         if free_cudagraph_pools and self.settings.uses_cudagraphs:
             logging.info("Resetting process-wide torch.compile caches before evaluation with CUDA graphs")
@@ -263,7 +264,7 @@ class TorchCompileManager:
             yield
 
     @contextlib.contextmanager
-    def epoch_scope(self) -> Iterator[Callable[[int], None]]:
+    def epoch_scope(self) -> Generator[Callable[[int], None], None, None]:
         """Yields a per-step callback that stops full guard evaluation from step
         ``train.compile_skip_guard_eval_after_steps`` until the epoch ends. Every input variant must appear before
         that step: afterwards an input that fails only a skipped guard would run a wrong graph.

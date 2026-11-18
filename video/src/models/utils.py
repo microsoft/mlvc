@@ -2,7 +2,6 @@
 # Licensed under the MIT license.
 
 import contextlib
-from typing import Optional
 
 import torch
 from torch import nn
@@ -44,16 +43,16 @@ class UpperBound(Function):
         return mask.to(grad_output.dtype) * grad_output, None
 
 
-def apply_upper_lower_bound(x: torch.Tensor, *, lower: Optional[float] = None, upper: Optional[float] = None):
+def apply_upper_lower_bound(x: torch.Tensor, *, lower: float | None = None, upper: float | None = None):
     if lower is None and upper is None:
         return x
 
     if x.requires_grad:
         if lower is not None:
-            x_out: torch.Tensor = LowerBound.apply(x, lower)  # type: ignore[reportAssignmentType]
+            x_out: torch.Tensor = LowerBound.apply(x, lower)
             x = x_out
         if upper is not None:
-            x_out = UpperBound.apply(x, upper)  # type: ignore[reportAssignmentType]
+            x_out = UpperBound.apply(x, upper)
             x = x_out
         return x
     else:

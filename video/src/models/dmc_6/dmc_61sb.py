@@ -1,27 +1,28 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...utils.stream_helper import (
+    check_decoder_eof,
+    flush_encoder_streams,
+    get_downsampled_shape,
+    open_decoder_streams,
+    open_encoder_streams,
+)
 from ..common_model import CompressionModel
+from ..utils import CkptModule, apply_upper_lower_bound
 from .layers import (
-    SubpelConv2x,
     DepthConvBlock,
-    ResidualBlockUpsample,
-    ResidualBlockWithStride2,
     DMCConv2d,
     NetworkMode,
-)
-from ..utils import apply_upper_lower_bound, CkptModule
-from ...utils.stream_helper import (
-    get_downsampled_shape,
-    open_encoder_streams,
-    flush_encoder_streams,
-    open_decoder_streams,
-    check_decoder_eof,
+    ResidualBlockUpsample,
+    ResidualBlockWithStride2,
+    SubpelConv2x,
 )
 
 
@@ -39,7 +40,7 @@ class FeatureExtractor(CkptModule):
     ):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
 
         if num_conv1_layers < 1:
             raise ValueError("num_conv1_layers must be >= 1")
@@ -76,7 +77,7 @@ class FeatureAdaptorI(CkptModule):
     def __init__(self, in_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         self.conv = DepthConvBlock(in_ch, out_ch, **block_args)
 
     def internal_forward(self, x):
@@ -108,7 +109,7 @@ class Encoder(CkptModule):
         self.pixel_shuffle_factor = pixel_shuffle_factor
 
         conv_args = {"network_mode": network_mode}
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
 
         self.conv1 = DMCConv2d(in_ch, mid_ch, 1, **conv_args)
         self.conv2 = nn.Sequential(
@@ -142,7 +143,7 @@ class Decoder(CkptModule):
     ):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         conv_args = {"network_mode": network_mode}
 
         self.up = SubpelConv2x(in_ch, mid_ch, 3, padding=1, network_mode=network_mode)
@@ -198,7 +199,7 @@ class ReconGeneration(CkptModule):
         self.pixel_shuffle_factor = pixel_shuffle_factor
 
         conv_args = {"network_mode": network_mode}
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
 
         self.conv = nn.Sequential(
             DepthConvBlock(in_ch, mid_ch, **block_args),
@@ -239,8 +240,11 @@ class HyperEncoder(CkptModule):
                 out_c = out_ch if i == num_downsample_layers - 1 else mid_ch
                 layers.append(DMCConv2d(in_c, out_c, 2, stride=2, network_mode=network_mode))
         else:
-            block_args = {**depth_conv_block_params, "network_mode": network_mode}
-            residual_block_args = {"depth_conv_block_params": depth_conv_block_params, "network_mode": network_mode}
+            block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
+            residual_block_args: dict[str, Any] = {
+                "depth_conv_block_params": depth_conv_block_params,
+                "network_mode": network_mode,
+            }
 
             layers: list[nn.Module] = [DepthConvBlock(in_ch, mid_ch, **block_args)]
             for i in range(num_downsample_layers):
@@ -276,8 +280,11 @@ class HyperDecoder(CkptModule):
                 out_c = out_ch if i == num_upsample_layers - 1 else mid_ch
                 layers.append(SubpelConv2x(in_c, out_c, 1, network_mode=network_mode))
         else:
-            block_args = {**depth_conv_block_params, "network_mode": network_mode}
-            residual_block_args = {"depth_conv_block_params": depth_conv_block_params, "network_mode": network_mode}
+            block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
+            residual_block_args: dict[str, Any] = {
+                "depth_conv_block_params": depth_conv_block_params,
+                "network_mode": network_mode,
+            }
 
             layers = []
             for i in range(num_upsample_layers):
@@ -295,7 +302,7 @@ class PriorFusion(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         conv_args = {"network_mode": network_mode}
 
         self.conv = nn.Sequential(
@@ -313,7 +320,7 @@ class SpatialPrior(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         conv_args = {"network_mode": network_mode}
 
         self.conv = nn.Sequential(
@@ -708,20 +715,20 @@ class DMC(CompressionModel):
             x_hat = self.unshift_output(x_hat)
         feature = torch.cat((feature, memory), dim=1)
 
-        dpb = dict(
-            ref_frame=x_hat,
-            ref_feature=feature,
-        )
+        dpb = {
+            "ref_frame": x_hat,
+            "ref_feature": feature,
+        }
 
-        result = dict(
-            dpb=dpb,
-            q_index=q_index,
-            z_raw=z_raw,
-            z_hat=z_hat,
-            y_raw=y_raw,
-            y_hat=y_hat,
-            y_q=y_q,
-        )
+        result = {
+            "dpb": dpb,
+            "q_index": q_index,
+            "z_raw": z_raw,
+            "z_hat": z_hat,
+            "y_raw": y_raw,
+            "y_hat": y_hat,
+            "y_q": y_q,
+        }
 
         return result
 
@@ -759,10 +766,10 @@ class DMC(CompressionModel):
             x_hat = self.unshift_output(x_hat)
         feature = torch.cat((feature, memory), dim=1)
 
-        out_dpb = dict(
-            ref_frame=x_hat,
-            ref_feature=feature,
-        )
+        out_dpb = {
+            "ref_frame": x_hat,
+            "ref_feature": feature,
+        }
 
         return x_hat, feature, out_dpb, ctx, ctx_t
 
@@ -803,11 +810,11 @@ class DMC(CompressionModel):
 
         bit_stream = flush_encoder_streams(streams)
 
-        result = dict(
-            x_hat=dpb["ref_frame"],
-            dpb=dpb,
-            bit_stream=bit_stream,
-        )
+        result = {
+            "x_hat": dpb["ref_frame"],
+            "dpb": dpb,
+            "bit_stream": bit_stream,
+        }
 
         if calc_bits_estimates:
             bits_y = self.get_y_bits_estimate(y_raw)
@@ -856,12 +863,12 @@ class DMC(CompressionModel):
         x_hat = self.unshift_output(x_hat)
         feature = torch.cat((feature, memory), dim=1)
 
-        dpb = dict(
-            ref_frame=x_hat,
-            ref_feature=feature,
-        )
+        dpb = {
+            "ref_frame": x_hat,
+            "ref_feature": feature,
+        }
 
-        return dict(x_hat=x_hat, dpb=dpb)
+        return {"x_hat": x_hat, "dpb": dpb}
 
     def forward(self, x, dpb, *, q_index, fa_idx):
         result = self.compress_core(x, dpb, q_index, fa_idx)
@@ -887,17 +894,17 @@ class DMC(CompressionModel):
         bpp_z = bits_z / pixel_num
         bpp = bits / pixel_num
 
-        return dict(
-            bpp_y=bpp_y,
-            bpp_z=bpp_z,
-            bpp=bpp,
-            dpb=dpb,
-            x_hat=dpb["ref_frame"],
-            bits=bits,
-            bits_y=bits_y,
-            bits_z=bits_z,
+        return {
+            "bpp_y": bpp_y,
+            "bpp_z": bpp_z,
+            "bpp": bpp,
+            "dpb": dpb,
+            "x_hat": dpb["ref_frame"],
+            "bits": bits,
+            "bits_y": bits_y,
+            "bits_z": bits_z,
             # Latents exposed for a drift decode
-            z_hat=z_hat,
-            y_raw=y_raw,
-            y_q=y_q,
-        )
+            "z_hat": z_hat,
+            "y_raw": y_raw,
+            "y_q": y_q,
+        }

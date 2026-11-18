@@ -3,8 +3,10 @@
 # Adapted from https://github.com/sunwei925/SimpleVQA (Apache-2.0); see LICENSE.
 # Model definitions from revision 017edda50e8cdbeb48113a001dbb9af0dbd2030b.
 
+from typing import ClassVar
+
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 def global_std_pool2d(x):
@@ -30,12 +32,12 @@ def conv1x1(in_planes, out_planes, stride=1):
 
 class BasicBlock(nn.Module):
     expansion = 1
-    __constants__ = ["downsample"]
+    __constants__: ClassVar[list[str]] = ["downsample"]
 
     def __init__(
         self, inplanes, planes, stride=1, downsample=None, groups=1, base_width=64, dilation=1, norm_layer=None
     ):
-        super(BasicBlock, self).__init__()
+        super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         if groups != 1 or base_width != 64:
@@ -66,12 +68,12 @@ class BasicBlock(nn.Module):
 
 class Bottleneck(nn.Module):
     expansion = 4
-    __constants__ = ["downsample"]
+    __constants__: ClassVar[list[str]] = ["downsample"]
 
     def __init__(
         self, inplanes, planes, stride=1, downsample=None, groups=1, base_width=64, dilation=1, norm_layer=None
     ):
-        super(Bottleneck, self).__init__()
+        super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         width = int(planes * (base_width / 64.0)) * groups
@@ -114,7 +116,7 @@ class ResNet(nn.Module):
         replace_stride_with_dilation=None,
         norm_layer=None,
     ):
-        super(ResNet, self).__init__()
+        super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
@@ -124,9 +126,7 @@ class ResNet(nn.Module):
             replace_stride_with_dilation = [False, False, False]
         if len(replace_stride_with_dilation) != 3:
             raise ValueError(
-                "replace_stride_with_dilation should be None or a 3-element tuple, got {}".format(
-                    replace_stride_with_dilation
-                )
+                f"replace_stride_with_dilation should be None or a 3-element tuple, got {replace_stride_with_dilation}"
             )
         self.groups = groups
         self.base_width = width_per_group

@@ -8,7 +8,7 @@ import sys
 __all__ = ["get_pipe_buffer_max_size", "set_pipe_buffer_size"]
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def get_pipe_buffer_max_size():
     max_size = 65536
     if sys.platform.startswith("linux"):
@@ -20,7 +20,7 @@ def get_pipe_buffer_max_size():
                 raise ValueError("Invalid buffer size")
 
             max_size = sz
-        except IOError:
+        except OSError:
             logging.warning("can not read /proc/sys/fs/pipe-max-size", exc_info=True)
         except ValueError:
             logging.warning("can not decode /proc/sys/fs/pipe-max-size", exc_info=True)
@@ -30,7 +30,7 @@ def get_pipe_buffer_max_size():
 
 def set_pipe_buffer_size(fd, buffer_size):
     if sys.platform.startswith("linux"):
-        from fcntl import fcntl  # type: ignore[attr-defined]
+        from fcntl import fcntl
 
         F_SETPIPE_SZ = 1024 + 7
         F_GETPIPE_SZ = 1024 + 8

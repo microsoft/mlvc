@@ -4,14 +4,14 @@
 import json
 import logging
 import os
-from typing import Dict, Any
+from typing import Any
 
 import torch
 
 from src.utils.app import BaseApp
+from src.utils.common import AuxiliaryModels
 from src.utils.encoder_tester import EncoderTestParams, run_encoder_test
 from src.utils.frame_reader_model_adapter import FrameReaderModelFactory
-from src.utils.common import AuxiliaryModels
 
 
 class ComputeBenchmarkMetricApp(BaseApp):
@@ -47,7 +47,7 @@ class ComputeBenchmarkMetricApp(BaseApp):
         for testset_name, testset_config in config.items():
             self.collect_metrics_on_testset(testset_name, testset_config)
 
-    def collect_metrics_on_testset(self, testset_name, config: Dict[str, Any]):
+    def collect_metrics_on_testset(self, testset_name, config: dict[str, Any]):
         intra_period = config.get("intra_period")
 
         use_i_frame_model = config.get("use_i_frame_model", None)
@@ -122,7 +122,7 @@ class ComputeBenchmarkMetricApp(BaseApp):
 
         return i_frame_q_index_list, p_frame_q_index_list
 
-    def _compute_decoder_metrics(self, *, config: Dict[str, Any], encoder_params: EncoderTestParams, encoder_metrics):
+    def _compute_decoder_metrics(self, *, config: dict[str, Any], encoder_params: EncoderTestParams, encoder_metrics):
         decoder_config = config.get("decoder_metrics")
         if decoder_config is None:
             return
@@ -162,7 +162,7 @@ class ComputeBenchmarkMetricApp(BaseApp):
 
         self._run_encoder_test(testset_name, config=decoder_config, params=params, model=model)
 
-    def _run_encoder_test(self, testset_name: str, *, config: Dict[str, Any], params: EncoderTestParams, model):
+    def _run_encoder_test(self, testset_name: str, *, config: dict[str, Any], params: EncoderTestParams, model):
         testset_desc_filename = self.resolve_path(config["config"], default_source=".")
         target_config = config.get("target")
         if target_config is not None:

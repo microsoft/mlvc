@@ -1,20 +1,21 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import numpy as np
-import coremltools as ct
 from pathlib import Path
+
+import coremltools as ct
+import numpy as np
+import torch
 from coremltools.optimize.torch.quantization import (
     LinearQuantizer,
     LinearQuantizerConfig,
     ModuleLinearQuantizerConfig,
 )
 
-from . import _coreml_utils  # noqa: F401
+from ..types import ConversionMetadata, ModelData, ModelPartMetadata, ModelPrecision, ModelType, TensorLayout
 from ..utils import iter_namedtuple, to_torch_namedtuple
+from . import _coreml_utils  # noqa: F401
 from ._base_exporter import BaseExporter
-from ..types import ModelType, ModelPrecision, ConversionMetadata, ModelData, TensorLayout, ModelPartMetadata
 
 
 def _quantize(model: torch.nn.Module, example_model_data: list[ModelData]) -> torch.nn.Module:
@@ -49,15 +50,19 @@ class CoreMLExporter(BaseExporter):
         self,
         quantize_int8: bool = False,
         minimum_deployment_target: str | None = None,
-        coreml_prepend_pass_pipelines=[],
-        coreml_append_pass_pipelines: list[str] = [
-            "mlvc::fast_prediction_workaround",
-            "mlvc::pixel_shuffle_workaround",
-            "mlvc::split_gated_conv",
-            "mlvc::gather_first",
-        ],
+        coreml_prepend_pass_pipelines=None,
+        coreml_append_pass_pipelines: list[str] | None = None,
         **kwargs,
     ):
+        if coreml_append_pass_pipelines is None:
+            coreml_append_pass_pipelines = [
+                "mlvc::fast_prediction_workaround",
+                "mlvc::pixel_shuffle_workaround",
+                "mlvc::split_gated_conv",
+                "mlvc::gather_first",
+            ]
+        if coreml_prepend_pass_pipelines is None:
+            coreml_prepend_pass_pipelines = []
         super().__init__(model_type=ModelType.COREML, **kwargs)
         if TensorLayout.NHWC in (self._image_layout, self._feature_layout):
             raise ValueError("CoreML exporter only supports NCHW layouts")
@@ -107,10 +112,10 @@ class CoreMLExporter(BaseExporter):
         disabled_passes = [] if not fake_quantized else ["mlvc::pixel_shuffle_workaround"]
         for i, pass_name in enumerate(self._coreml_prepend_pass_pipelines):
             if pass_name not in disabled_passes:
-                pipeline.insert_pass(i, pass_name)  # type: ignore[attr-defined]
+                pipeline.insert_pass(i, pass_name)
         for pass_name in self._coreml_append_pass_pipelines:
             if pass_name not in disabled_passes:
-                pipeline.append_pass(pass_name)  # type: ignore[attr-defined]
+                pipeline.append_pass(pass_name)
 
         compute_precision = ct.precision.FLOAT32 if self._precision == ModelPrecision.FP32 else ct.precision.FLOAT16
 
@@ -128,12 +133,12 @@ class CoreMLExporter(BaseExporter):
             minimum_deployment_target=deployment_target,
             convert_to="mlprogram",
             compute_precision=compute_precision,
-            pass_pipeline=pipeline,  # type: ignore[arg-type]
+            pass_pipeline=pipeline,
             skip_model_load=True,
         )
 
         model_output_path = str(output_path / f"{model_name}.mlpackage")
-        converted.save(model_output_path)  # type: ignore[attr-defined]
+        converted.save(model_output_path)
         print(f"Saved CoreML model to {model_output_path}")
         return metadata
 

@@ -1,12 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import numpy as np
-from pathlib import Path
 from abc import ABC, abstractmethod
+from pathlib import Path
+
+import numpy as np
 
 from .types import ScaleDecoderType
-
 
 SCALE_DECODER_FILENAMES: dict[str, str] = {}
 

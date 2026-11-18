@@ -2,7 +2,7 @@
 # Licensed under the MIT license.
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class MS_SSIM(nn.Module):
@@ -91,7 +91,7 @@ class MS_SSIM(nn.Module):
             weight = self._weight4
 
         level = weight.shape[0]
-        value_list = list()
+        value_list = []
         for i in range(level - 1):
             cs = self._ssim(x1, x2, calc_ssim=False)
             value_list.append(self._mean(cs))

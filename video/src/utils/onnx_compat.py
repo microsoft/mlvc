@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import torch
 
@@ -12,7 +12,7 @@ def replicate_pad(x: torch.Tensor, *, pad: Sequence[int]):
             v = v.item()
         return v
 
-    for i in range(0, len(pad) // 2):
+    for i in range(len(pad) // 2):
         left = untrace(pad[2 * i])
         right = untrace(pad[2 * i + 1])
 
@@ -37,7 +37,7 @@ def replicate_pad(x: torch.Tensor, *, pad: Sequence[int]):
             x = x[(..., slice(start, end)) + tail]
 
         if left > 0 or right > 0:
-            parts = list()
+            parts = []
 
             if left > 0:
                 p = x[(..., slice(0, 1)) + tail]

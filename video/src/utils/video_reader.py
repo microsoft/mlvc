@@ -5,13 +5,14 @@ import os
 
 import numpy as np
 from PIL import Image
+
 from ..transforms.functional import (
     rgb_to_ycbcr420,
-    ycbcr420_to_rgb,
-    ycbcr444_to_rgb,
-    ycbcr444_to_420,
     rgb_to_ycbcr444,
     ycbcr420_to_444,
+    ycbcr420_to_rgb,
+    ycbcr444_to_420,
+    ycbcr444_to_rgb,
 )
 
 
@@ -112,7 +113,7 @@ class RGBReader(VideoReader):
             self.max_val = (1 << bit_depth) - 1
         else:
             assert bit_depth == 8
-        self.file = open(src_path, "rb")
+        self.file = open(src_path, "rb")  # noqa: SIM115 - owned by the reader, closed in close()
 
     def read_one_frame(self, dst_format="420"):
         if self.eof:
@@ -157,7 +158,7 @@ class YUVReader(VideoReader):
             self.max_val = (1 << bit_depth) - 1
         else:
             assert bit_depth == 8
-        self.file = open(src_path, "rb")
+        self.file = open(src_path, "rb")  # noqa: SIM115 - owned by the reader, closed in close()
         skipped_frame = 0
         while not self.eof and skipped_frame < skip_frame:
             y = self.file.read(self.y_size)

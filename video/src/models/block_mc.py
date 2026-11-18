@@ -3,7 +3,6 @@
 
 import torch
 
-
 backward_grid = [{} for _ in range(9)]  # 0~7 for GPU, -1 for CPU
 force_recalculate_grid = False
 
@@ -15,7 +14,6 @@ def set_force_recalculate_grid(force):
 
 def add_grid_cache(flow):
     device_id = -1 if flow.device == torch.device("cpu") else flow.device.index
-    global force_recalculate_grid
     if str(flow.size()) not in backward_grid[device_id] or force_recalculate_grid:
         N, _, H, W = flow.size()
         tensor_hor = (

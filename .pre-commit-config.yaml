@@ -59,3 +59,11 @@ repos:
         types_or: [python, pyi, jupyter]
         require_serial: true
         minimum_pre_commit_version: 2.9.2
+
+      - id: ty-check
+        name: ty check
+        entry: uv run --frozen --no-sync ty check --error-on-warning
+        language: system
+        types_or: [python, pyi, jupyter]
+        pass_filenames: false
+        require_serial: true

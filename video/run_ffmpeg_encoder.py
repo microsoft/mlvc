@@ -43,23 +43,23 @@ class FFMpegEncoderApp(BaseApp):
 
         fps = self.get_config_by_path("ffmpeg_encoder.fps", expected_type=numbers.Real)
 
-        clip_path_cache = dict()
-        clip_list = list()
-        for dataset_name, dataset_desc in testset_desc["test_classes"].items():
+        clip_path_cache = {}
+        clip_list = []
+        for dataset_desc in testset_desc["test_classes"].values():
             if not dataset_desc.get("test", True):
                 continue
             for seq_name, seq_desc in dataset_desc["sequences"].items():
-                clip_path = os.path.join(dataset_desc["base_path"], seq_name)
-                clip_path = os.path.splitext(clip_path)[0]
+                base_clip_path = os.path.join(dataset_desc["base_path"], seq_name)
+                base_clip_path = os.path.splitext(base_clip_path)[0]
 
-                for clip_path in self._expand_clip_paths(clip_path_cache, clip_path):
+                for clip_path in self._expand_clip_paths(clip_path_cache, base_clip_path):
                     clip_list.append(
-                        dict(
-                            filename=clip_path,
-                            width=seq_desc["width"],
-                            height=seq_desc["height"],
-                            fps=fps,
-                        )
+                        {
+                            "filename": clip_path,
+                            "width": seq_desc["width"],
+                            "height": seq_desc["height"],
+                            "fps": fps,
+                        }
                     )
 
         return clip_list
@@ -68,7 +68,7 @@ class FFMpegEncoderApp(BaseApp):
         clip_folder = os.path.dirname(clip_path)
         file_map = self._list_clip_files(clip_path_cache, clip_folder)
 
-        file_list = list()
+        file_list = []
 
         prefix = os.path.basename(clip_path)
         for n, used in file_map.items():
@@ -91,7 +91,7 @@ class FFMpegEncoderApp(BaseApp):
     def _list_clip_files(self, clip_path_cache, folder: str):
         file_list = clip_path_cache.get(folder)
         if file_list is None:
-            file_list = dict()
+            file_list = {}
             for de in os.scandir(os.path.join(self.yuv_path, folder)):
                 if de.name.endswith(".yuv") and de.is_file():
                     file_list[de.name] = False

@@ -1,23 +1,25 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import time
-import torch
 import platform
-import tempfile
-import tarfile
 import shutil
-import numpy as np
+import tarfile
+import tempfile
+import time
+from collections import namedtuple
 from pathlib import Path
 from typing import Any, NamedTuple
-from collections import namedtuple
+
+import numpy as np
+import torch
+
 from . import _windowsml
 from .types import (
-    ModelType,
+    CoremlComputeUnits,
     ModelOpProfile,
     ModelPartMetadata,
     ModelPrecision,
-    CoremlComputeUnits,
+    ModelType,
     OnnxExecutionProvider,
     RuntimeParams,
     TensorLayout,
@@ -192,7 +194,7 @@ class ModelWrapper:
 def _load_onnx_model(model_path: Path | str, runtime_params: RuntimeParams):
     print(f"Loading ONNX model from {model_path} with execution provider {runtime_params.onnx_execution_provider}")
     _windowsml.ensure_initialized()
-    import onnxruntime as ort  # type: ignore[import-not-found]
+    import onnxruntime as ort
 
     sess_options = ort.SessionOptions()
     # sess_options.intra_op_num_threads = 1  # To match roottools results
@@ -221,7 +223,7 @@ def _load_onnx_model(model_path: Path | str, runtime_params: RuntimeParams):
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
 
         if platform.system() == "Windows":
-            import onnxruntime.tools.add_openvino_win_libs as utils  # type: ignore[import-not-found]
+            import onnxruntime.tools.add_openvino_win_libs as utils
 
             utils.add_openvino_libs_to_path()
 
@@ -329,7 +331,7 @@ def _load_coreml_model(
 
 
 def _load_openvino_model(model_path: Path | str, runtime_params: RuntimeParams):
-    import openvino as ov  # type: ignore[import-not-found]
+    import openvino as ov
 
     config = {}
     if runtime_params.openvino_enable_profiling:

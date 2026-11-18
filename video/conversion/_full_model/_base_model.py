@@ -1,17 +1,19 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import json
-import torch
-import numpy as np
 import dataclasses
+import json
+from collections.abc import Callable
 from pathlib import Path
-from ..utils import download_job_outputs
-from ..types import ModelParams, ModelVersion, GaussianCoderPmf, BitEstimatorPmf
-from src.utils.stream_helper import get_state_dict, get_padding_size
-from src.models.entropy_models import GaussianEncoder, BitEstimator
 
-from typing import Callable
+import numpy as np
+import torch
+
+from src.models.entropy_models import BitEstimator, GaussianEncoder
+from src.utils.stream_helper import get_padding_size, get_state_dict
+
+from ..types import BitEstimatorPmf, GaussianCoderPmf, ModelParams, ModelVersion
+from ..utils import download_job_outputs
 
 
 class BaseFullModel(torch.nn.Module):
@@ -107,8 +109,9 @@ class BaseFullModel(torch.nn.Module):
 
     @torch.no_grad()
     def _fuse_depthconvblock_alphas(self):
-        import torch.nn as nn
-        from src.models.dmc_6.layers import DMCConv2d, DepthConvBlock
+        from torch import nn
+
+        from src.models.dmc_6.layers import DepthConvBlock, DMCConv2d
 
         def _fold_alpha_into_last_conv(alpha: nn.Parameter, seq: nn.Sequential):
             if alpha is None:
@@ -184,11 +187,11 @@ class BaseFullModel(torch.nn.Module):
         )
 
 
-class FxTraceableMixin:
+class FxTraceableMixin(torch.nn.Module):
     def _init_masks(self, size):
         # Note: This approach restricts the model to a single fixed resolution
-        device = next(self.parameters()).device  # type: ignore
-        dtype = next(self.parameters()).dtype  # type: ignore
+        device = next(self.parameters()).device
+        dtype = next(self.parameters()).dtype
         self._mask_0, self._mask_1 = get_mask_dual(size, dtype=dtype, device=device)
 
     def train(self, mode=True):
@@ -196,7 +199,7 @@ class FxTraceableMixin:
         if mode:
             print("Warning: Training is not supported for full models, keeping in eval mode")
             return
-        super().train(mode)  # type: ignore
+        super().train(mode)
 
     def get_mask_dual(self, batch, channel, height, width, dtype, device):
         # Fix for torch.fx tracing error: remove dynamic mask generation
@@ -259,7 +262,7 @@ class ConfigOnlyFullModel(BaseFullModel):
 
 def _fix_quantization_negative_scales(state_dict):
     quantized_module_names = []
-    for k in state_dict.keys():
+    for k in state_dict:
         if k.endswith("feature_scale1"):
             quantized_module_names.append(k[:-15])
 

@@ -2,22 +2,25 @@
 # Licensed under the MIT license.
 
 import json
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 from tabulate import tabulate
+
+from src.metrics.bjontegaard_metric import calculate_bd_rate
+
+from .const import DEFAULT_JOB_OUTPUTS_DIR
 from .types import (
-    RuntimeParams,
+    AggregatedMetric,
+    BenchmarkResults,
     FrameLoopParams,
     FrameLoopSummary,
-    AggregatedMetric,
     ProfileResults,
-    BenchmarkResults,
+    RuntimeParams,
     ValidateConversionResults,
     ValidationTestResults,
 )
-from .const import DEFAULT_JOB_OUTPUTS_DIR
-from .utils import parse_metrics, download_job_outputs, transform_validation_test_results
-from src.metrics.bjontegaard_metric import calculate_bd_rate
+from .utils import download_job_outputs, parse_metrics, transform_validation_test_results
 
 
 def print_runtime_params(params: RuntimeParams) -> None:
@@ -168,8 +171,7 @@ def _print_tables_side_by_side(table1: str, table2: str) -> None:
     for i in range(max_lines):
         line1 = lines1[i] if i < len(lines1) else ""
         line2 = lines2[i] if i < len(lines2) else ""
-        format_str = "{line1:<%d}  {line2}" % (table1_width + 2)
-        print(format_str.format(line1=line1, line2=line2))
+        print(f"{line1:<{table1_width + 2}}  {line2}")
 
 
 def print_validate_conversion_results(results: ValidateConversionResults):

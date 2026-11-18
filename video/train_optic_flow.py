@@ -3,19 +3,18 @@
 
 import json
 import logging
-from typing import Dict, Any, Optional
 import os
+from typing import Any
 
 import torch
 from torch import nn
 
 from src.datasets.video_dataset import FastVideoFolder
-from src.utils.app import BaseTrainVideoApp
-from src.models.legacy.video_net import ME_SpynetOptimised
 from src.models.block_mc import block_mc_func
+from src.models.legacy.video_net import ME_SpynetOptimised
+from src.utils.app import BaseTrainVideoApp
 from src.utils.encoder_tester import EncoderTestParams
 from src.utils.flow_tester import run_flow_test
-
 from src.utils.stream_helper import get_state_dict
 
 
@@ -41,7 +40,7 @@ class TrainFlowApp(BaseTrainVideoApp):
     def model_config(self):
         return self.config["model"]["optic_flow"]
 
-    def load_model(self, model_state, pretrained: Optional[bool] = None):
+    def load_model(self, model_state, pretrained: bool | None = None):
         model = self.create_model()
 
         if model_state is None and (pretrained is None or pretrained):
@@ -188,7 +187,7 @@ class TrainFlowApp(BaseTrainVideoApp):
             )
             f.write(line)
 
-    def run_benchmark_on_testset(self, epoch, testset_name, config: Dict[str, Any], flow_model: nn.Module):
+    def run_benchmark_on_testset(self, epoch, testset_name, config: dict[str, Any], flow_model: nn.Module):
         i_frame_q_index_list = [21]
         p_frame_q_index_list = i_frame_q_index_list
 

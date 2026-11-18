@@ -5,14 +5,15 @@ import abc
 import dataclasses
 import inspect
 import math
-from typing import Optional, Callable, Dict, Any
+from collections.abc import Callable
+from typing import Any
 
 import torch
-import torch.nn as nn
+from torch import nn
 
-from ..transforms.functional import yuv_444_to_420, rgb2ycbcr, ycbcr2rgb
 from ..metrics.msssim import MS_SSIM
-from ..utils.common import downsample_mask, AuxiliaryModels
+from ..transforms.functional import rgb2ycbcr, ycbcr2rgb, yuv_444_to_420
+from ..utils.common import AuxiliaryModels, downsample_mask
 
 __all__ = ["get_loss_func"]
 
@@ -20,14 +21,14 @@ __all__ = ["get_loss_func"]
 @dataclasses.dataclass(eq=False)
 class FrameLossComponents:
     recon: torch.Tensor
-    bpp: Optional[torch.Tensor] = None
-    calibration: Optional[torch.Tensor] = None
-    stats: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    bpp: torch.Tensor | None = None
+    calibration: torch.Tensor | None = None
+    stats: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
 class BaseFrameLoss(nn.Module, abc.ABC):
     @abc.abstractmethod
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None) -> FrameLossComponents:
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None) -> FrameLossComponents:
         """
         Calc bits per pixel and reconsruction loss components
         Args:
@@ -43,7 +44,7 @@ class BaseFrameLoss(nn.Module, abc.ABC):
 
 
 class CodecLoss(nn.Module):
-    def __init__(self, *, frame_loss: BaseFrameLoss, mse_lambda_exponent: Optional[float], bpp_weight: Optional[float]):
+    def __init__(self, *, frame_loss: BaseFrameLoss, mse_lambda_exponent: float | None, bpp_weight: float | None):
         super().__init__()
         self.frame_loss = frame_loss
         if mse_lambda_exponent is not None:
@@ -53,7 +54,7 @@ class CodecLoss(nn.Module):
         self.mse_lambda_exponent = mse_lambda_exponent
         self.bpp_weight = float(bpp_weight) if bpp_weight is not None else 1.0
 
-    def forward(self, rd, target: torch.Tensor, *, lambdas: torch.Tensor, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, lambdas: torch.Tensor, mask: torch.Tensor | None = None):
         components = self.frame_loss(rd, target, mask=mask)
         ld = components.stats
         ld["loss"] = self.combine_loss(components.recon, components.bpp, lambdas)
@@ -130,9 +131,7 @@ def get_roi_weights_normalized(roi_bg_ratio: float, r: torch.Tensor, N: int):
     return w_bg, w_roi
 
 
-def get_roi_weights_wrapper(
-    roi_bg_ratio: float, x: torch.Tensor, r: torch.Tensor, N: int, p_roi: Optional[float] = None
-):
+def get_roi_weights_wrapper(roi_bg_ratio: float, x: torch.Tensor, r: torch.Tensor, N: int, p_roi: float | None = None):
     if p_roi is not None:
         w_bg, w_roi = get_roi_weights(roi_bg_ratio=roi_bg_ratio, p_roi=p_roi)
     else:
@@ -149,10 +148,10 @@ class BaseMSEFrameLoss(BaseFrameLoss, abc.ABC):
         self,
         *,
         is_yuv420: bool,
-        mse_y_weight: Optional[float],
-        mse_yuv_420: Optional[float],
-        mse_yuv_mean_in_psnr: Optional[bool],
-        mse_rgb_weight: Optional[float],
+        mse_y_weight: float | None,
+        mse_yuv_420: float | None,
+        mse_yuv_mean_in_psnr: bool | None,
+        mse_rgb_weight: float | None,
     ):
         super().__init__()
         self.is_yuv420 = is_yuv420
@@ -187,7 +186,7 @@ class BaseMSEFrameLoss(BaseFrameLoss, abc.ABC):
 
     @staticmethod
     def mean_vector_mse(
-        x, x_hat, *, flatten_dim=1, mask=None, roi_bg_ratio: Optional[float] = None, p_roi: Optional[float] = None
+        x, x_hat, *, flatten_dim=1, mask=None, roi_bg_ratio: float | None = None, p_roi: float | None = None
     ):
         """
         Args:
@@ -293,50 +292,50 @@ class BaseMSEFrameLoss(BaseFrameLoss, abc.ABC):
 
 
 class loss_me_mse(BaseMSEFrameLoss):
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         me_mse = self.calc_frame_mse(rd["warp_frame"], target)
         return FrameLossComponents(
             recon=me_mse,
-            stats=dict(
-                me_mse=me_mse,
-            ),
+            stats={
+                "me_mse": me_mse,
+            },
         )
 
 
 class loss_me_rdc_mse(BaseMSEFrameLoss):
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         me_mse = self.calc_frame_mse(rd["warp_frame"], target)
         bpp = rd["bpp_mv_y"] + rd["bpp_mv_z"]
         return FrameLossComponents(
             recon=me_mse,
             bpp=bpp,
-            stats=dict(
-                me_mse=me_mse,
-            ),
+            stats={
+                "me_mse": me_mse,
+            },
         )
 
 
 class loss_recon_mse(BaseMSEFrameLoss):
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         mse = self.calc_frame_mse(rd["x_hat"], target)
         return FrameLossComponents(
             recon=mse,
-            stats=dict(
-                mse=mse,
-            ),
+            stats={
+                "mse": mse,
+            },
         )
 
 
 class loss_recon_rdc_mse(BaseMSEFrameLoss):
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         mse = self.calc_frame_mse(rd["x_hat"], target)
         bpp = rd["bpp_y"] + rd["bpp_z"]
         return FrameLossComponents(
             recon=mse,
             bpp=bpp,
-            stats=dict(
-                mse=mse,
-            ),
+            stats={
+                "mse": mse,
+            },
         )
 
 
@@ -345,10 +344,10 @@ class loss_rdc_mse_flow_sup(BaseMSEFrameLoss):
         self,
         *,
         is_yuv420: bool,
-        mse_y_weight: Optional[float],
-        mse_yuv_420: Optional[float],
-        mse_yuv_mean_in_psnr: Optional[bool],
-        mse_rgb_weight: Optional[float],
+        mse_y_weight: float | None,
+        mse_yuv_420: float | None,
+        mse_yuv_mean_in_psnr: bool | None,
+        mse_rgb_weight: float | None,
         optic_flow_loss: nn.Module,
     ):
         super().__init__(
@@ -360,7 +359,7 @@ class loss_rdc_mse_flow_sup(BaseMSEFrameLoss):
         )
         self.optic_flow_loss = optic_flow_loss
 
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         mse = self.calc_frame_mse(rd["x_hat"], target)
         # MSRA applies per frame distortion weights only to MSE part
         # Here distortion weights are already premultiplied into lambdas
@@ -369,24 +368,24 @@ class loss_rdc_mse_flow_sup(BaseMSEFrameLoss):
         return FrameLossComponents(
             recon=mse + flow_sup,
             bpp=bpp,
-            stats=dict(
-                mse=mse,
-                flow_sup=flow_sup,
-            ),
+            stats={
+                "mse": mse,
+                "flow_sup": flow_sup,
+            },
         )
 
 
 class loss_total_rdc_mse(BaseMSEFrameLoss):
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         mse = self.calc_frame_mse(rd["x_hat"], target)
         bpp = rd["bpp"]
         return FrameLossComponents(
             recon=mse,
             bpp=bpp,
-            stats=dict(
-                mse=mse,
-                psnr=self.calc_psnr(mse),
-            ),
+            stats={
+                "mse": mse,
+                "psnr": self.calc_psnr(mse),
+            },
         )
 
 
@@ -395,9 +394,9 @@ class loss_total_rdc_psnr(BaseMSEFrameLoss):
         self,
         *,
         is_yuv420: bool,
-        mse_y_weight: Optional[float],
-        mse_yuv_420: Optional[float],
-        mse_rgb_weight: Optional[float],
+        mse_y_weight: float | None,
+        mse_yuv_420: float | None,
+        mse_rgb_weight: float | None,
     ):
         super().__init__(
             is_yuv420=is_yuv420,
@@ -407,16 +406,16 @@ class loss_total_rdc_psnr(BaseMSEFrameLoss):
             mse_rgb_weight=mse_rgb_weight,
         )
 
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         mse = self.calc_frame_mse(rd["x_hat"], target)
         bpp = rd["bpp"]
         return FrameLossComponents(
             recon=mse,
             bpp=bpp,
-            stats=dict(
-                mse=mse,
-                psnr=self.calc_psnr(mse),
-            ),
+            stats={
+                "mse": mse,
+                "psnr": self.calc_psnr(mse),
+            },
         )
 
 
@@ -425,14 +424,14 @@ class BasePerceptualFrameLoss(BaseMSEFrameLoss, abc.ABC):
         self,
         *,
         is_yuv420: bool,
-        mse_y_weight: Optional[float],
-        mse_yuv_420: Optional[float],
-        mse_yuv_mean_in_psnr: Optional[bool],
-        mse_rgb_weight: Optional[float],
+        mse_y_weight: float | None,
+        mse_yuv_420: float | None,
+        mse_yuv_mean_in_psnr: bool | None,
+        mse_rgb_weight: float | None,
         perceptual_loss: nn.Module,
         distortion_loss_weight: float,
         perceptual_loss_weight: float,
-        perceptual_rgb_weight: Optional[float],
+        perceptual_rgb_weight: float | None,
     ):
         super().__init__(
             is_yuv420=is_yuv420,
@@ -467,15 +466,15 @@ class BasePerceptualFrameLoss(BaseMSEFrameLoss, abc.ABC):
         *,
         mask,
         flatten_dim=1,
-        roi_bg_ratio: Optional[float] = None,
-        p_roi: Optional[float] = None,
+        roi_bg_ratio: float | None = None,
+        p_roi: float | None = None,
     ) -> torch.Tensor:
         """Get spatial loss and weight it by mask if provided."""
 
-        perceptual_rgb = (
+        perceptual_rgb: torch.Tensor | None = (
             self.perceptual_loss(rec_rgb, org_rgb, spatial=True) if self.perceptual_rgb_weight != 0 else None
         )
-        perceptual_yuv = (
+        perceptual_yuv: torch.Tensor | None = (
             self.perceptual_loss(rec_yuv, org_yuv, spatial=True) if self.perceptual_rgb_weight != 1 else None
         )
 
@@ -508,7 +507,7 @@ class BasePerceptualFrameLoss(BaseMSEFrameLoss, abc.ABC):
 
 
 class loss_total_rdc_perceptual(BasePerceptualFrameLoss):
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         # Does either MSE or perceptual require RGB?
         rgb_weight = (self.mse_rgb_weight + self.perceptual_rgb_weight) / 2
         org_yuv, rec_yuv, org_rgb, rec_rgb = self._prepare_yuv_rgb(target, rd["x_hat"], rgb_weight=rgb_weight)
@@ -521,11 +520,11 @@ class loss_total_rdc_perceptual(BasePerceptualFrameLoss):
         return FrameLossComponents(
             recon=total,
             bpp=rd["bpp"],
-            stats=dict(
-                mse=mse,
-                perceptual=perceptual,
-                psnr=self.calc_psnr(mse),
-            ),
+            stats={
+                "mse": mse,
+                "perceptual": perceptual,
+                "psnr": self.calc_psnr(mse),
+            },
         )
 
 
@@ -534,11 +533,11 @@ class loss_total_rdc_psnr_roi_per_pixel(BaseMSEFrameLoss):
         self,
         *,
         is_yuv420: bool,
-        mse_y_weight: Optional[float],
-        mse_yuv_420: Optional[float],
-        mse_rgb_weight: Optional[float],
+        mse_y_weight: float | None,
+        mse_yuv_420: float | None,
+        mse_rgb_weight: float | None,
         roi_bg_ratio: float,
-        p_roi: Optional[float] = None,
+        p_roi: float | None = None,
         segmentation_model: nn.Module,
     ):
         super().__init__(
@@ -557,7 +556,7 @@ class loss_total_rdc_psnr_roi_per_pixel(BaseMSEFrameLoss):
             assert 0 < p_roi < 1, f"ROI weight must be in (0, 1), got {p_roi}"
         self.p_roi = p_roi
 
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         bpp = rd["bpp"]
         if mask is None:
             mask = self.segmentation_model(target, is_yuv420=self.is_yuv420)
@@ -572,10 +571,10 @@ class loss_total_rdc_psnr_roi_per_pixel(BaseMSEFrameLoss):
         return FrameLossComponents(
             recon=recon_total,
             bpp=bpp,
-            stats=dict(
-                recon_total=recon_total,
-                mask_proba=mask_proba,
-            ),
+            stats={
+                "recon_total": recon_total,
+                "mask_proba": mask_proba,
+            },
         )
 
 
@@ -584,16 +583,16 @@ class loss_total_rdc_perceptual_roi_per_pixel(BasePerceptualFrameLoss):
         self,
         *,
         is_yuv420: bool,
-        mse_y_weight: Optional[float],
-        mse_yuv_420: Optional[float],
-        mse_yuv_mean_in_psnr: Optional[bool],
-        mse_rgb_weight: Optional[float],
+        mse_y_weight: float | None,
+        mse_yuv_420: float | None,
+        mse_yuv_mean_in_psnr: bool | None,
+        mse_rgb_weight: float | None,
         perceptual_loss: nn.Module,
         distortion_loss_weight: float,
         perceptual_loss_weight: float,
-        perceptual_rgb_weight: Optional[float],
+        perceptual_rgb_weight: float | None,
         roi_bg_ratio: float,
-        p_roi: Optional[float] = None,
+        p_roi: float | None = None,
         segmentation_model: nn.Module,
     ):
         super().__init__(
@@ -610,16 +609,15 @@ class loss_total_rdc_perceptual_roi_per_pixel(BasePerceptualFrameLoss):
 
         if roi_bg_ratio is None:
             raise ValueError("roi_bg_ratio must be set")
-        if p_roi is not None:
-            if not 0 <= p_roi <= 1:
-                raise ValueError(f"ROI weight must be in [0, 1], got {p_roi}")
+        if p_roi is not None and not 0 <= p_roi <= 1:
+            raise ValueError(f"ROI weight must be in [0, 1], got {p_roi}")
 
         self.roi_bg_ratio = roi_bg_ratio
         self.p_roi = p_roi
 
         self.segmentation_model = segmentation_model
 
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         bpp = rd["bpp"]
         if mask is None:
             mask = self.segmentation_model(target, is_yuv420=self.is_yuv420)
@@ -645,12 +643,12 @@ class loss_total_rdc_perceptual_roi_per_pixel(BasePerceptualFrameLoss):
         return FrameLossComponents(
             recon=final,
             bpp=bpp,
-            stats=dict(
-                final=final,
-                mask_proba=mask_proba,
-                mse_masked=mse_masked,
-                perceptual_masked=perceptual_masked,
-            ),
+            stats={
+                "final": final,
+                "mask_proba": mask_proba,
+                "mse_masked": mse_masked,
+                "perceptual_masked": perceptual_masked,
+            },
         )
 
 
@@ -678,15 +676,15 @@ class BaseMSSSIMFrameLoss(BaseFrameLoss, abc.ABC):
 
 
 class loss_total_rdc_ms_ssim(BaseMSSSIMFrameLoss):
-    def forward(self, rd, target: torch.Tensor, *, mask: Optional[torch.Tensor] = None):
+    def forward(self, rd, target: torch.Tensor, *, mask: torch.Tensor | None = None):
         ssim = self.calc_frame_msssim(rd["x_hat"], target)
         bpp = rd["bpp"]
         return FrameLossComponents(
             recon=ssim / 17,
             bpp=bpp,
-            stats=dict(
-                ssim=ssim,
-            ),
+            stats={
+                "ssim": ssim,
+            },
         )
 
 
@@ -694,20 +692,20 @@ def get_loss_func(
     loss_type: str,
     *,
     is_yuv420: bool,
-    mse_lambda_exponent: Optional[float] = None,
-    bpp_weight: Optional[float] = None,
-    mse_y_weight: Optional[float] = None,
-    mse_yuv_420: Optional[float] = None,
-    mse_yuv_mean_in_psnr: Optional[bool] = None,
-    mse_rgb_weight: Optional[float] = None,
-    create_optic_flow_loss: Optional[Callable[[], nn.Module]] = None,
-    auxiliary_models: Optional[AuxiliaryModels] = None,
-    perceptual_loss_weight: Optional[float] = None,
-    distortion_loss_weight: Optional[float] = None,
-    roi_weight: Optional[float] = None,
-    perceptual_rgb_weight: Optional[float] = None,
-    roi_bg_ratio: Optional[float] = None,
-    p_roi: Optional[float] = None,
+    mse_lambda_exponent: float | None = None,
+    bpp_weight: float | None = None,
+    mse_y_weight: float | None = None,
+    mse_yuv_420: float | None = None,
+    mse_yuv_mean_in_psnr: bool | None = None,
+    mse_rgb_weight: float | None = None,
+    create_optic_flow_loss: Callable[[], nn.Module] | None = None,
+    auxiliary_models: AuxiliaryModels | None = None,
+    perceptual_loss_weight: float | None = None,
+    distortion_loss_weight: float | None = None,
+    roi_weight: float | None = None,
+    perceptual_rgb_weight: float | None = None,
+    roi_bg_ratio: float | None = None,
+    p_roi: float | None = None,
 ):
     frame_loss_name = f"loss_{loss_type}"
     frame_loss_type = globals().get(frame_loss_name)

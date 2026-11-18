@@ -2,7 +2,6 @@
 # Licensed under the MIT license.
 
 import warnings
-from typing import Optional
 
 import numpy as np
 import scipy.interpolate
@@ -27,7 +26,7 @@ def _rate_quality_envelope(rate, metric, *, curve: str):
 
 
 def calculate_bd_rate(
-    r1, metric1, r2, metric2, *, piecewise=0, lower_bound: Optional[float] = None, upper_bound: Optional[float] = None
+    r1, metric1, r2, metric2, *, piecewise=0, lower_bound: float | None = None, upper_bound: float | None = None
 ):
     if piecewise != 0:
         r1, metric1 = _rate_quality_envelope(r1, metric1, curve="anchor")

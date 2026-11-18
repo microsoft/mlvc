@@ -3,10 +3,12 @@
 
 import importlib
 import re
-import yaml
 from pathlib import Path
-from ..const import DEFAULT_JOB_OUTPUTS_DIR
+
+import yaml
+
 from .._azure import get_azureml_job
+from ..const import DEFAULT_JOB_OUTPUTS_DIR
 from ._base_model import BaseFullModel
 
 _CONFIG_PATH = Path(__file__).parent / "model_configs.yaml"

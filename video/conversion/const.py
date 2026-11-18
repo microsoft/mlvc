@@ -2,11 +2,11 @@
 # Licensed under the MIT license.
 
 import os
-import sys
 import platform
+import sys
 from pathlib import Path
-from .types import ModelType, TargetDevice
 
+from .types import ModelType, TargetDevice
 
 DEFAULT_JOB_OUTPUTS_DIR = os.environ.get("VIDEO_JOB_OUTPUTS_DIR", "~/mlvc/job-outputs/")
 DEFAULT_TEST_DATA_DIR = os.environ.get("VIDEO_TEST_DATA_DIR", "~/mlvc/data/VCD/")

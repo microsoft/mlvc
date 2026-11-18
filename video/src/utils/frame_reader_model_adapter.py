@@ -5,13 +5,14 @@ import json
 import os
 import re
 import subprocess
-from typing import Optional, Dict, Any
 from fractions import Fraction
+from typing import Any
 
 import torch
 
 from src.datasets.ffmpeg_dataset import FfmpegIterator
 from src.transforms.functional import yuv_420_to_444
+
 from .encoder_tester import EncoderTestTask
 from .video_reader import YUVReader
 
@@ -26,7 +27,7 @@ class FrameReaderModelAdapter(torch.nn.Module):
         width: int,
         height: int,
         stream_format: str,
-        bits: Optional[torch.Tensor],
+        bits: torch.Tensor | None,
     ):
         super().__init__()
         self.streamname = streamname
@@ -78,7 +79,7 @@ class FrameReaderModelAdapter(torch.nn.Module):
             cmd.append("-show_frames")
         cmd.append(streamname)
 
-        rc = subprocess.run(cmd, capture_output=True)
+        rc = subprocess.run(cmd, capture_output=True, check=False)
         if rc.returncode != 0:
             if rc.stderr is not None and len(rc.stderr) > 0:
                 error = ":\n" + rc.stderr.decode(encoding="utf-8", errors="ignore")
@@ -102,7 +103,7 @@ class FrameReaderModelAdapter(torch.nn.Module):
             bits = None
             if return_bits:
                 stream_index = stream_info["index"]
-                bits = list()
+                bits = []
                 for frame in info["frames"]:
                     if frame["stream_index"] != stream_index:
                         continue
@@ -141,7 +142,7 @@ class FrameReaderModelAdapter(torch.nn.Module):
         yuv = yuv_420_to_444((y, u, v), mode="nearest")
         yuv = torch.nn.functional.pad(yuv, (0, x.shape[-1] - yuv.shape[-1], 0, x.shape[-2] - yuv.shape[-2]))
 
-        return dict(bits=self.bits[frame_index][None, ...], x_hat=yuv, dpb=dict())
+        return {"bits": self.bits[frame_index][None, ...], "x_hat": yuv, "dpb": {}}
 
 
 class FrameReaderModelFactory:
@@ -149,10 +150,10 @@ class FrameReaderModelFactory:
         self,
         *,
         clip_folder,
-        clip_filename_format: Optional[str] = None,
+        clip_filename_format: str | None = None,
         clip_format: str,
-        metrics: Optional[Dict[str, Any]],
-        seq_id_regexp: Optional[str] = None,
+        metrics: dict[str, Any] | None,
+        seq_id_regexp: str | None = None,
         device: torch.device,
     ):
         self.clip_folder = clip_folder
@@ -172,14 +173,14 @@ class FrameReaderModelFactory:
 
         return "".join(x for x in m.groups() if x) or m.group(0)
 
-    def _process_dataset(self, metrics: Dict[str, Any]):
+    def _process_dataset(self, metrics: dict[str, Any]):
         return {self._normalize_seq_id(n): self._process_seq(n, v) for n, v in metrics.items()}
 
-    def _process_seq(self, seq_id, metrics: Dict[str, Any]):
-        return dict(seq_id=seq_id, bits=dict(self._process_qp(n, v) for n, v in metrics.items()))
+    def _process_seq(self, seq_id, metrics: dict[str, Any]):
+        return {"seq_id": seq_id, "bits": dict(self._process_qp(n, v) for n, v in metrics.items())}
 
     @staticmethod
-    def _process_qp(qp, metrics: Dict[str, Any]):
+    def _process_qp(qp, metrics: dict[str, Any]):
         p_frame_q_index = metrics.get("p_frame_q_index")
         if isinstance(p_frame_q_index, int) and p_frame_q_index == metrics.get("i_frame_q_index"):
             # normalize qp description

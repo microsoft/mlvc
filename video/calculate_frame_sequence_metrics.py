@@ -2,16 +2,17 @@
 # Licensed under the MIT license.
 
 import json
+import logging
 import os
 from pathlib import Path
-import numpy as np
-import cv2  # type: ignore[import-not-found]
-from torch.utils.data import DataLoader, Dataset
-import torch
-import torch.nn as nn
-from PIL import Image
-import logging
 from time import time
+
+import cv2
+import numpy as np
+import torch
+from PIL import Image
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
 
 from src.utils.app import BaseApp
 from src.utils.common import AuxiliaryModels
@@ -131,7 +132,7 @@ class FrameSequenceMetricApp(BaseApp):
         type_full_name = self.get_config_by_path("model.optic_flow.type", expected_type=str, default=None)
         if type_full_name is None:
             raise ValueError("model.optic_flow.type missing")
-        params = self.get_config_by_path("model.optic_flow.params", expected_type=dict, default=dict())
+        params = self.get_config_by_path("model.optic_flow.params", expected_type=dict, default={})
         ckpt_path = self.get_config_by_path("model.optic_flow.ckpt_path", expected_type=str, default=None)
         if ckpt_path is None:
             raise ValueError("model.optic_flow.ckpt_path missing")
@@ -194,7 +195,7 @@ class FrameSequenceMetricApp(BaseApp):
         q_tensor = torch.as_tensor(self._of_quantiles, dtype=torch.float, device=d.device).mul_(0.01)
         q_values = d.quantile(q_tensor, dim=-1).squeeze(0).cpu()
         for q, qv in zip(self._of_quantiles, q_values):
-            name = "d_" + ("{:.4f}".format(q).rstrip("0").rstrip(".").replace(".", ""))
+            name = "d_" + (f"{q:.4f}".rstrip("0").rstrip(".").replace(".", ""))
             metrics[name] = qv
         return metrics
 
@@ -245,7 +246,7 @@ class FrameSequenceMetricApp(BaseApp):
         # optic flow accumulators (N-1 pairs)
         of_d_mean = []
         of_d_std = []
-        of_quantiles = dict()
+        of_quantiles = {}
         prev_tensor = None
         # texture complexity accumulators
         fft_hf_ratios = []

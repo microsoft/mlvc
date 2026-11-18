@@ -1,57 +1,58 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import re
-import json
 import argparse
 import dataclasses
-from pathlib import Path
+import json
+import re
 from enum import Enum
+from pathlib import Path
 from typing import Any
-from conversion.const import (
-    DEFAULT_JOB_OUTPUTS_DIR,
-    DEFAULT_TEST_DATA_DIR,
-    DEFAULT_EXPORT_DIR,
-    DEFAULT_MODEL_TYPE,
-    DEFAULT_MODEL_WIDTH,
-    DEFAULT_MODEL_HEIGHT,
-    DEFAULT_TEST_CONFIG_PATH,
-    DEFAULT_NUM_CLIPS_LIMIT,
-    DEFAULT_TEST_Q_INDEX_LIST,
-    DEFAULT_ANCHOR_PATH,
-    DEFAULT_CONVERT_FRAME_COUNT,
-    DEFAULT_INCLUDE_BITSTREAM_OVERHEAD,
-    DEFAULT_METRICS_BIT_DEPTH,
-)
-from conversion.types import (
-    TargetDevice,
-    ModelType,
-    ModelPrecision,
-    ScaleDecoderType,
-    RuntimeParams,
-    CoremlComputeUnits,
-    OnnxExecutionProvider,
-    TorchDevice,
-    OpenvinoDevice,
-    ConversionMetadata,
-    MlvcVersion,
-    PaddingMode,
-    PaddingDirection,
-)
+
 from conversion import (
     ModelTester,
-    full_model_factory,
-    split_full_model,
-    load_split_model,
     exporter_factory,
-    model_bundler_factory,
-    print_runtime_params,
-    print_validate_conversion_results,
-    print_profile_results,
-    print_benchmark_results,
-    print_validation_test_results,
+    full_model_factory,
     get_available_models,
     get_available_split_types,
+    load_split_model,
+    model_bundler_factory,
+    print_benchmark_results,
+    print_profile_results,
+    print_runtime_params,
+    print_validate_conversion_results,
+    print_validation_test_results,
+    split_full_model,
+)
+from conversion.const import (
+    DEFAULT_ANCHOR_PATH,
+    DEFAULT_CONVERT_FRAME_COUNT,
+    DEFAULT_EXPORT_DIR,
+    DEFAULT_INCLUDE_BITSTREAM_OVERHEAD,
+    DEFAULT_JOB_OUTPUTS_DIR,
+    DEFAULT_METRICS_BIT_DEPTH,
+    DEFAULT_MODEL_HEIGHT,
+    DEFAULT_MODEL_TYPE,
+    DEFAULT_MODEL_WIDTH,
+    DEFAULT_NUM_CLIPS_LIMIT,
+    DEFAULT_TEST_CONFIG_PATH,
+    DEFAULT_TEST_DATA_DIR,
+    DEFAULT_TEST_Q_INDEX_LIST,
+)
+from conversion.types import (
+    ConversionMetadata,
+    CoremlComputeUnits,
+    MlvcVersion,
+    ModelPrecision,
+    ModelType,
+    OnnxExecutionProvider,
+    OpenvinoDevice,
+    PaddingDirection,
+    PaddingMode,
+    RuntimeParams,
+    ScaleDecoderType,
+    TargetDevice,
+    TorchDevice,
 )
 
 
@@ -592,7 +593,7 @@ def _add_bundle_arguments(parser: argparse.ArgumentParser):
         try:
             w, h = s.lower().replace(",", "x").split("x")
             return int(w), int(h)
-        except Exception:
+        except ValueError:
             raise argparse.ArgumentTypeError(f"Invalid size '{s}'. Expected format WxH, e.g. 640x360")
 
     def _parse_mlvc_version(s: str) -> MlvcVersion:

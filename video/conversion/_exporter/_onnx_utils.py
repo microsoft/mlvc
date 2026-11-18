@@ -289,9 +289,8 @@ class OnnxOptimizer:
 
     def _get_constant(self, name):
         for node in self._graph.node:
-            if node.op_type == "Constant":
-                if node.output[0] == name:
-                    return onnx.numpy_helper.to_array(node.attribute[0].t)
+            if node.op_type == "Constant" and node.output[0] == name:
+                return onnx.numpy_helper.to_array(node.attribute[0].t)
         initializer = self._get_initializer(name)
         if initializer is not None:
             return onnx.numpy_helper.to_array(initializer)

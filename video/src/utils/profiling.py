@@ -1,11 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import time
-import logging
-from torch import nn
-from collections import defaultdict
 import functools
+import logging
+import time
+from collections import defaultdict
+
+from torch import nn
 
 
 def timer(func):

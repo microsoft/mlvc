@@ -1,39 +1,41 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import time
 import shutil
+import time
+from pathlib import Path
+
 import numpy as np
 from tqdm import tqdm
-from pathlib import Path
+
+from ._rate_controller import RateController
+from ._split_model import BaseSplitModel
 from .const import (
-    DEFAULT_TEST_DATA_DIR,
     DEFAULT_INCLUDE_BITSTREAM_OVERHEAD,
     DEFAULT_METRICS_BIT_DEPTH,
+    DEFAULT_TEST_DATA_DIR,
 )
-from ._split_model import BaseSplitModel
 from .types import (
-    FrameMetrics,
-    FrameType,
-    FrameLoopParams,
+    AggregatedMetric,
     FrameLoopFrameResult,
+    FrameLoopParams,
     FrameLoopResults,
     FrameLoopSummary,
-    AggregatedMetric,
-    ModelPartId,
+    FrameMetrics,
+    FrameType,
     ModelData,
     ModelOpProfile,
-    PaddingMode,
+    ModelPartId,
     PaddingDirection,
+    PaddingMode,
 )
-from ._rate_controller import RateController
 from .utils import (
-    calc_psnr,
-    read_video_frames,
     MlvcFrameHeader,
-    read_mlvc_bitstreams,
-    save_mlvc_bitstreams,
+    calc_psnr,
     download_test_data,
+    read_mlvc_bitstreams,
+    read_video_frames,
+    save_mlvc_bitstreams,
 )
 
 Q_INDEX_DROP_SENTINEL = -1
@@ -83,7 +85,7 @@ class FrameLoop:
         ltr_start_idx: int | None = None,
         ltr_period: int | None = None,
         proactive_ltr_recovery: bool | None = None,
-        q_index_overrides: dict[int, int | None] = {},  # frame_id -> q_index (sticky)
+        q_index_overrides: dict[int, int | None] | None = None,  # frame_id -> q_index (sticky)
         padding_mode: PaddingMode | None = None,
         padding_direction: PaddingDirection | None = None,
         include_bitstream_overhead: bool = DEFAULT_INCLUDE_BITSTREAM_OVERHEAD,
@@ -94,6 +96,8 @@ class FrameLoop:
         save_debug_data: bool = False,
         save_yuv: bool = False,
     ) -> FrameLoopResults:
+        if q_index_overrides is None:
+            q_index_overrides = {}
 
         # Validate rate control params
         if q_index is not None and bitrate is not None:
@@ -483,9 +487,7 @@ def aggregate_frame_loop_results(
 def _estimate_bitstream_overhead_bytes(frame_type: FrameType) -> int:
     if frame_type == FrameType.I_FRAME:
         return 28
-    elif frame_type == FrameType.P_FRAME:
-        return 16
-    elif frame_type == FrameType.LTR_RECOVERY:
+    elif frame_type == FrameType.P_FRAME or frame_type == FrameType.LTR_RECOVERY:
         return 16
     else:
         raise ValueError(f"Unsupported frame type: {frame_type}")

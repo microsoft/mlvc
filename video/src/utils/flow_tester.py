@@ -4,27 +4,27 @@
 import logging
 import os
 import time
-from typing import Optional, Callable, List
+from collections.abc import Callable
 
 import torch
-import torch.nn as nn
 import torch.utils.data
+from torch import nn
 
-from .common import dump_json
-from .stream_helper import get_padding_size
-from .video_writer import PNGWriter, YUVWriter
 from ..metrics.msssim import MS_SSIM
-from ..transforms.functional import yuv_420_to_444
 from ..models.block_mc import block_mc_func
+from ..transforms.functional import yuv_420_to_444
+from .common import dump_json
 from .encoder_tester import (
-    EncoderTestParams,
-    EncoderTestTask,
     EncoderTestDataset,
     EncoderTester,
+    EncoderTestParams,
+    EncoderTestTask,
     EncoderTestTaskProcessor,
-    identity_collate_fn,
     create_frame_reader,
+    identity_collate_fn,
 )
+from .stream_helper import get_padding_size
+from .video_writer import PNGWriter, YUVWriter
 
 
 class FlowTestTaskProcessor(EncoderTestTaskProcessor):
@@ -32,7 +32,7 @@ class FlowTestTaskProcessor(EncoderTestTaskProcessor):
         self,
         task: EncoderTestTask,
         flow_model: nn.Module,
-        read_one_frame: Optional[Callable] = None,
+        read_one_frame: Callable | None = None,
     ):
         self.task = task
 
@@ -117,13 +117,13 @@ class FlowTestTaskProcessor(EncoderTestTaskProcessor):
         if frame_idx % task.intra_period == 0:
             # Skip I-frame for flow
 
-            dpb = dict(
-                ref_frame=x,
-                ref_feature=None,
-                ref_mv_feature=None,
-                ref_y=None,
-                ref_mv_y=None,
-            )
+            dpb = {
+                "ref_frame": x,
+                "ref_feature": None,
+                "ref_mv_feature": None,
+                "ref_y": None,
+                "ref_mv_y": None,
+            }
             self.frame_types.append(0)
         else:
             assert dpb is not None
@@ -131,16 +131,16 @@ class FlowTestTaskProcessor(EncoderTestTaskProcessor):
                 flow = self.flow_model(x, dpb["ref_frame"])
             except ValueError:
                 logging.exception(f"flow inference failed for {self.task.src_path} - {task.rank_idx} - {frame_idx}")
-                dpb = dict(
-                    dpb=dict(
-                        ref_frame=torch.zeros_like(x),
-                        ref_feature=None,
-                        ref_mv_feature=None,
-                        ref_y=None,
-                        ref_mv_y=None,
-                    ),
-                    bit=0,
-                )
+                dpb = {
+                    "dpb": {
+                        "ref_frame": torch.zeros_like(x),
+                        "ref_feature": None,
+                        "ref_mv_feature": None,
+                        "ref_y": None,
+                        "ref_mv_y": None,
+                    },
+                    "bit": 0,
+                }
 
             self.frame_types.append(1)
 
@@ -159,23 +159,23 @@ class FlowTestTaskProcessor(EncoderTestTaskProcessor):
                 )
 
             # Use actual image as reference for next frame
-            dpb = dict(
-                ref_frame=x,
-                ref_feature=None,
-                ref_mv_feature=None,
-                ref_y=None,
-                ref_mv_y=None,
-            )
+            dpb = {
+                "ref_frame": x,
+                "ref_feature": None,
+                "ref_mv_feature": None,
+                "ref_y": None,
+                "ref_mv_y": None,
+            }
 
         return dpb
 
     def _generate_result(self):
-        result = dict(
-            ds_name=self.task.dataset_name,
-            video_path=self.task.seq_name,
-            frame_pixel_num=self.frame_pixel_num,
-            n_frames=self.task.n_frames,
-        )
+        result = {
+            "ds_name": self.task.dataset_name,
+            "video_path": self.task.seq_name,
+            "frame_pixel_num": self.frame_pixel_num,
+            "n_frames": self.task.n_frames,
+        }
 
         result["psnr"] = self.frame_stats["psnr"]
         result["msssim"] = self.frame_stats["msssim"]
@@ -205,7 +205,7 @@ class FlowTester(EncoderTester):
 
         self.flow_model = flow_model
 
-    def _process_task_list(self, task_list: List[EncoderTestTask]):
+    def _process_task_list(self, task_list: list[EncoderTestTask]):
         dataset = EncoderTestDataset(task_list)
         data_loader = torch.utils.data.DataLoader(
             dataset,
@@ -229,9 +229,9 @@ def run_flow_test(
     testset_name: str,
     testset_desc_filename: str,
     rank=-1,
-    flow_model: nn.Module = nn.Module(),
-    testset_root: Optional[str] = None,
-    output_path: Optional[str] = None,
+    flow_model: nn.Module,
+    testset_root: str | None = None,
+    output_path: str | None = None,
 ):
     tester = FlowTester(rank, params, flow_model=flow_model)
     result = tester.run(testset_name, testset_desc_filename, testset_root=testset_root)

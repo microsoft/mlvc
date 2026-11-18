@@ -6,7 +6,6 @@ import numbers
 import os
 import random
 import re
-from typing import Union, Optional
 
 import numpy as np
 import torch
@@ -23,24 +22,24 @@ class FastVideoFolder(Dataset):
         *,
         frame_num=5,
         crop_method="center",
-        target_resolution: Union[None, int, str] = None,
+        target_resolution: None | int | str = None,
         allow_tiling: bool = False,
         max_zoom_factor=1.0,
         min_zoom_factor=1.0,
         random_flip=False,
         frame_selection="random",
-        max_frame_distance: Optional[int] = None,
-        frame_distance: Union[None, int, str] = None,
+        max_frame_distance: int | None = None,
+        frame_distance: None | int | str = None,
         disable_random=False,
-        precomputed_masks_path: Optional[str] = None,
-        resampling_method: Optional[str] = None,
-        thread_count: Optional[int] = None,
+        precomputed_masks_path: str | None = None,
+        resampling_method: str | None = None,
+        thread_count: int | None = None,
         padding_simulation_prob: float = 0.0,
         padding_simulation_min: float = 0.0,
         padding_simulation_max: float = 0.15,
         padding_simulation_color: str = "gray",
         padding_simulation_alignment: str = "bottom_right",
-        target_description_path: Optional[str] = None,
+        target_description_path: str | None = None,
         target_prob: float = 1.0,
         exact_resizing: bool = False,
     ):
@@ -59,8 +58,8 @@ class FastVideoFolder(Dataset):
         self.seqs = seqs
         self.exact_resizing = bool(exact_resizing)
 
-        self.target_root_folder_path: Optional[str] = None
-        self.target_seqs: Optional[list] = None
+        self.target_root_folder_path: str | None = None
+        self.target_seqs: list | None = None
         if target_description_path is not None:
             self.target_root_folder_path = os.path.dirname(target_description_path)
             target_seqs = self._load_dataset_description(target_description_path)
@@ -111,13 +110,13 @@ class FastVideoFolder(Dataset):
                 raise ValueError(f"Invalid frame_distance: {frame_distance}")
         elif frame_distance:
             try:
-                frame_distance = self._parse_probability_spec(self._parse_positive_int, frame_distance)  # type: ignore[assignment]
+                frame_distance = self._parse_probability_spec(self._parse_positive_int, frame_distance)
             except (TypeError, ValueError) as e:
                 raise ValueError(f"Invalid frame_distance specification {frame_distance}") from e
 
             if isinstance(frame_distance, tuple):
                 # convert frame_distance list to tensor
-                frame_distance = torch.tensor(frame_distance[0], dtype=torch.int), *frame_distance[1:]  # type: ignore[assignment]
+                frame_distance = torch.tensor(frame_distance[0], dtype=torch.int), *frame_distance[1:]  # ty: ignore[invalid-assignment]
         else:
             frame_distance = None
 
@@ -132,12 +131,12 @@ class FastVideoFolder(Dataset):
         if frame_selection in ("random2",):
             if frame_distance is None:
                 assert max_frame_distance is not None
-                frame_distance = (  # type: ignore[assignment]
+                frame_distance = (  # ty: ignore[invalid-assignment]
                     torch.arange(1, max_frame_distance + 1),
-                    torch.distributions.Categorical(max_frame_distance),  # type: ignore[arg-type]
+                    torch.distributions.Categorical(torch.ones(max_frame_distance)),
                 )
             elif isinstance(frame_distance, tuple):
-                max_frame_distance = int(frame_distance[0].max().item())  # type: ignore[union-attr]
+                max_frame_distance = int(frame_distance[0].max().item())
             else:
                 max_frame_distance = int(frame_distance)
 
@@ -282,8 +281,8 @@ class FastVideoFolder(Dataset):
 
     @staticmethod
     def _parse_probability_spec(parse_value, spec):
-        value_list = list()
-        weight_list = list()
+        value_list = []
+        weight_list = []
         spec = spec.strip()
         for value in re.split(r"\s*[,|\s]\s*", spec):
             value, sep, weight = value.partition("/")
@@ -416,10 +415,10 @@ class FastVideoFolder(Dataset):
 
         img_indexes = []
         if self.frame_selection == "fix":
-            img_indexes = range(0, self.frame_num)
+            img_indexes = range(self.frame_num)
         elif self.frame_selection == "random":
             if self.frame_num < seq["seq_length"]:
-                img_indexes = random.sample(range(0, seq["seq_length"]), self.frame_num)
+                img_indexes = random.sample(range(seq["seq_length"]), self.frame_num)
                 is_reverse_order = random.choice([True, False])
                 img_indexes.sort(reverse=is_reverse_order)
                 assert self.max_frame_distance is not None
@@ -517,16 +516,16 @@ class FastVideoFolder(Dataset):
         if self.exact_resizing or (source_width, source_height) != (width, height):
             resampling_method = self._sample_categorical(self.resampling_method)
 
-        augparams = dict(
-            resampling_method=resampling_method,
-            resize_size=(resize_width, resize_height),
-            flip=flip,
-            n_tile_w=n_tile_w,
-            n_tile_h=n_tile_h,
-            pad_size=pad_size,
-            x=x,
-            y=y,
-        )
+        augparams = {
+            "resampling_method": resampling_method,
+            "resize_size": (resize_width, resize_height),
+            "flip": flip,
+            "n_tile_w": n_tile_w,
+            "n_tile_h": n_tile_h,
+            "pad_size": pad_size,
+            "x": x,
+            "y": y,
+        }
 
         mask_data = []
         target_data_arr = None
@@ -644,7 +643,7 @@ class FastVideoFolder(Dataset):
                 result["mask"] = mask_tensor
         return result
 
-    def _sample_pad_mask(self, h: int, w: int) -> Optional[torch.Tensor]:
+    def _sample_pad_mask(self, h: int, w: int) -> torch.Tensor | None:
         """Sample a padding mask (HxW bool, True where padding is applied), or None.
 
         The mask is drawn once per item so the caller can apply identical
@@ -688,7 +687,7 @@ class FastVideoFolder(Dataset):
         return pad_mask
 
     def _sample_frame_indices_random2(self, seq_length: int):
-        scalar_shape = tuple()
+        scalar_shape = ()
         if self.frame_num >= seq_length:
             img_indexes = (seq_length - 1) * torch.randint(2, scalar_shape) + torch.arange(self.frame_num)
             # length of backward sequence (without first and last frame)
@@ -704,7 +703,7 @@ class FastVideoFolder(Dataset):
             return img_indexes
         else:
             if not isinstance(self.frame_distance, tuple):
-                distances = torch.fill_(torch.empty(self.frame_num - 1, dtype=torch.int), self.frame_distance)  # type: ignore[arg-type]
+                distances = torch.fill_(torch.empty(self.frame_num - 1, dtype=torch.int), self.frame_distance)  # ty: ignore[no-matching-overload]
             else:
                 values, distribution = self.frame_distance
                 distances = values[distribution.sample((self.frame_num - 1,))]

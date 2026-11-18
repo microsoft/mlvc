@@ -2,15 +2,16 @@
 # Licensed under the MIT license.
 
 from collections import deque
-from typing import Iterable, Tuple, Callable, Any, Optional
+from collections.abc import Callable, Iterable
+from typing import Any
 
 import torch.utils.data
 
-__all__ = ["NamedChunkDataset", "BatchBuilderDataset", "FramePairDataset"]
+__all__ = ["BatchBuilderDataset", "FramePairDataset", "NamedChunkDataset"]
 
 
 class NamedChunkDatasetIterator(torch.utils.data.IterableDataset):
-    def __init__(self, chunks: Tuple[Tuple[str, torch.utils.data.IterableDataset], ...], *, prefetch: int = 0):
+    def __init__(self, chunks: tuple[tuple[str, torch.utils.data.IterableDataset], ...], *, prefetch: int = 0):
         super().__init__()
         self._chunks = chunks
 
@@ -89,7 +90,7 @@ class NamedChunkDatasetIterator(torch.utils.data.IterableDataset):
 
 
 class NamedChunkDataset(torch.utils.data.IterableDataset):
-    def __init__(self, chunks: Iterable[Tuple[str, torch.utils.data.IterableDataset]], *, prefetch: int = 0):
+    def __init__(self, chunks: Iterable[tuple[str, torch.utils.data.IterableDataset]], *, prefetch: int = 0):
         super().__init__()
         self.chunks = tuple(chunks)
         self.prefetch = prefetch
@@ -153,7 +154,7 @@ class BatchBuilderDataset(torch.utils.data.IterableDataset):
         *,
         batch_tensor_size: int,
         batch_size_step: int,
-        collate_fn: Optional[Callable[[Any], Any]] = None,
+        collate_fn: Callable[[Any], Any] | None = None,
     ):
         super().__init__()
         self.source = source

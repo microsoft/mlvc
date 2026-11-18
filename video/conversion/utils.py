@@ -1,21 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import math
 import json
-import torch
+import math
 import struct
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, NamedTuple
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from dataclasses import dataclass
-from typing import NamedTuple, Any
+import torch
+
+from src.utils.video_reader import PNGReader, YUVReader
+
 from ._azure import download_blob
 from ._env import get_env
-from .types import ModelType, ValidationTestResults
 from .const import DEFAULT_JOB_OUTPUTS_DIR, DEFAULT_TEST_DATA_DIR
-from src.utils.video_reader import PNGReader, YUVReader
+from .types import ModelType, ValidationTestResults
 
 
 def get_namedtuple_fields(x: NamedTuple):
@@ -29,7 +32,7 @@ def iter_namedtuple(x):
 
 def to_torch_namedtuple(x: NamedTuple) -> NamedTuple:
     tensors = {k: torch.from_numpy(v) for k, v in iter_namedtuple(x)}
-    return type(x)(**tensors)  # type: ignore
+    return type(x)(**tensors)
 
 
 def get_git_revision_hash() -> str:
@@ -83,7 +86,7 @@ def read_video_frames(
 
     original_frames = []
     while True:
-        y, uv = reader.read_one_frame(dst_format="420")  # type: ignore
+        y, uv = reader.read_one_frame(dst_format="420")
         if y is None:
             break
         original_frames.append((y, uv))

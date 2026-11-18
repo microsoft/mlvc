@@ -1,17 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import json
-import torch
-import platform
-import numpy as np
 import dataclasses
+import json
+import platform
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from dataclasses import dataclass
-from dataclasses_json import DataClassJsonMixin
 from typing import Any
 
+import numpy as np
+import torch
+from dataclasses_json import DataClassJsonMixin
 
 # -------------------------------------------------------------------------------------
 # Full model
@@ -383,7 +383,7 @@ class AggregatedMetric:
         digits: int | None = None,
         save_values: bool = False,
     ) -> "AggregatedMetric":
-        def _round(x: float | int) -> float | int:
+        def _round(x: float) -> float | int:
             if isinstance(x, (int, np.integer)):
                 return int(x)
             if digits is None:

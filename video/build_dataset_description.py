@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import sys
 
 import pandas as pd
 
@@ -15,16 +16,16 @@ def main():
     args = parser.parse_args()
 
     df = pd.read_csv(args.frame_sequence_csv)
-    dataset_description = list()
-    for t in df.itertuples():
+    dataset_description = []
+    for t in df.to_dict("records"):
         dataset_description.append(
-            dict(
-                height=(t.bbox_bottom - t.bbox_top) // t.scale_factor,  # type: ignore[attr-defined]
-                width=(t.bbox_right - t.bbox_left) // t.scale_factor,  # type: ignore[attr-defined]
-                seq_length=t.n_frames,  # type: ignore[attr-defined]
-                path=t.sequence_id,  # type: ignore[attr-defined]
-                frames=list(f"im{i:05d}.webp" for i in range(t.n_frames)),  # type: ignore[attr-defined]
-            )
+            {
+                "height": (t["bbox_bottom"] - t["bbox_top"]) // t["scale_factor"],
+                "width": (t["bbox_right"] - t["bbox_left"]) // t["scale_factor"],
+                "seq_length": t["n_frames"],
+                "path": t["sequence_id"],
+                "frames": [f"im{i:05d}.webp" for i in range(t["n_frames"])],
+            }
         )
 
     with open(args.dataset_description_json, "wt", encoding="utf-8") as f:
@@ -33,4 +34,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

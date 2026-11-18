@@ -4,7 +4,7 @@
 import math
 from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Literal, Tuple, Optional, Union, overload
+from typing import Any, Literal, overload
 
 import numpy as np
 import torch
@@ -13,18 +13,18 @@ from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 from src.transforms.functional import yuv_420_to_444
 
 __all__ = [
-    "get_padding_size",
-    "get_downsampled_shape",
-    "get_state_dict",
-    "prepare_frame",
-    "calc_psnr",
-    "is_bytes_like",
-    "open_encoder_streams",
-    "flush_encoder_streams",
-    "open_decoder_streams",
-    "check_decoder_eof",
-    "PaddingMode",
     "PaddingAlignment",
+    "PaddingMode",
+    "calc_psnr",
+    "check_decoder_eof",
+    "flush_encoder_streams",
+    "get_downsampled_shape",
+    "get_padding_size",
+    "get_state_dict",
+    "is_bytes_like",
+    "open_decoder_streams",
+    "open_encoder_streams",
+    "prepare_frame",
 ]
 
 
@@ -45,10 +45,10 @@ def get_padding_size(
     height: int,
     width: int,
     p: int = 64,
-    alignment: Union[str, PaddingAlignment] = PaddingAlignment.BOTTOM_RIGHT,
-    target_height: Optional[int] = None,
-    target_width: Optional[int] = None,
-) -> Tuple[int, int, int, int]:
+    alignment: str | PaddingAlignment = PaddingAlignment.BOTTOM_RIGHT,
+    target_height: int | None = None,
+    target_width: int | None = None,
+) -> tuple[int, int, int, int]:
     if isinstance(alignment, str):
         alignment = PaddingAlignment(alignment)
 
@@ -117,16 +117,16 @@ def get_state_dict(ckpt_path, *, return_epoch=False) -> dict | tuple[Any, dict]:
 
 
 def prepare_frame(
-    image: Tuple[np.ndarray, np.ndarray],
+    image: tuple[np.ndarray, np.ndarray],
     is_yuv420: bool = True,
     precision: str = "fp16",
     device=None,
     padding_size: int = 16,
     padding_mode: PaddingMode = PaddingMode.REPLICATE,
     padding_alignment: PaddingAlignment = PaddingAlignment.BOTTOM_RIGHT,
-    target_height: Optional[int] = None,
-    target_width: Optional[int] = None,
-) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor] | torch.Tensor, Tuple[int, int, int, int]]:
+    target_height: int | None = None,
+    target_width: int | None = None,
+) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor] | torch.Tensor, tuple[int, int, int, int]]:
     """Prepare a YUV444 frame for the model, and a YUV420 frame for evaluation"""
 
     if isinstance(padding_mode, str):

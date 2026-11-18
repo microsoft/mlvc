@@ -3,22 +3,24 @@
 
 import importlib
 from pathlib import Path
-from ..types import (
-    RuntimeParams,
-    BundleManifest,
-    ModelManifest,
-    ConversionMetadata,
-    GaussianCoderPmf,
-    BitEstimatorPmf,
-    ScaleDecoderType,
-)
+
+from src.utils.stream_helper import get_downsampled_shape
+
 from .._full_model import BaseFullModel, ConfigOnlyFullModel
 from .._full_model._model_factory import get_model_config
-from ._base_split_model import BaseSplitModel
 from .._model_wrapper import ModelWrapper
 from .._scale_decoder import scale_decoder_factory
+from ..types import (
+    BitEstimatorPmf,
+    BundleManifest,
+    ConversionMetadata,
+    GaussianCoderPmf,
+    ModelManifest,
+    RuntimeParams,
+    ScaleDecoderType,
+)
 from ..utils import get_model_type_extension
-from src.utils.stream_helper import get_downsampled_shape
+from ._base_split_model import BaseSplitModel
 
 
 def split_full_model(

@@ -2,9 +2,11 @@
 # Licensed under the MIT license.
 
 import math
+
 import numpy as np
-from .types import BasePmf, GaussianCoderPmf, BitEstimatorPmf
-from msrtc.rans import EntropyEncoder, EntropyDecoder, RansEncoderStream, RansDecoderStream
+from msrtc.rans import EntropyDecoder, EntropyEncoder, RansDecoderStream, RansEncoderStream
+
+from .types import BasePmf, BitEstimatorPmf, GaussianCoderPmf
 
 
 class _CoderBase:

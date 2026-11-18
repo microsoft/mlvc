@@ -14,8 +14,8 @@ from functools import cached_property
 
 import torch
 import torch.distributed
-import torch.nn as nn
 import torch.utils.data
+from torch import nn
 
 from src.datasets.ffmpeg_dataset import FfmpegDataset
 from src.datasets.iterable_datasets import BatchBuilderDataset, FramePairDataset, NamedChunkDataset
@@ -31,8 +31,8 @@ class OpticFlowApp(BaseApp):
         self._last_progress_time: float = 0.0
         self._device = None
         self._model = None
-        self._clip_metrics = dict()
-        self._clip_meta = dict()
+        self._clip_metrics = {}
+        self._clip_meta = {}
 
     @property
     def device(self):
@@ -115,7 +115,7 @@ class OpticFlowApp(BaseApp):
 
         torch.distributed.broadcast_object_list(filename_list)
 
-        self._wait_store = torch.distributed.FileStore(filename_list[0], self.world_size)  # pyright: ignore[reportPrivateImportUsage]
+        self._wait_store = torch.distributed.FileStore(filename_list[0], self.world_size)
 
     def _wait_all(self):
         if self.rank < 0:
@@ -128,7 +128,7 @@ class OpticFlowApp(BaseApp):
 
     def _load_model(self):
         type_full_name: str = self.get_config_by_path("model.optic_flow.type", expected_type=str)
-        params = self.get_config_by_path("model.optic_flow.params", expected_type=dict, default=dict())
+        params = self.get_config_by_path("model.optic_flow.params", expected_type=dict, default={})
 
         checkpoint_path = self.get_config_by_path("model.optic_flow.ckpt_path", expected_type=str)
         checkpoint_path = self.resolve_path(checkpoint_path, default_source="checkpoints_mount")
@@ -208,7 +208,7 @@ class OpticFlowApp(BaseApp):
         frame1 = frame1.to(self.device, non_blocking=True)
         frame2 = frame2.to(self.device, non_blocking=True)
 
-        metrics = dict()
+        metrics = {}
         if "optic_flow" not in self.skipped_metrics:
             metrics["optic_flow"] = self._process_optic_flow(frame1, frame2)
 
@@ -221,7 +221,7 @@ class OpticFlowApp(BaseApp):
         self._add_metrics(clip_name, frame1.size(0), metrics)
 
     def _process_optic_flow(self, frame1, frame2):
-        metrics = dict()
+        metrics = {}
 
         def calc_pad(x, g):
             r = x % g
@@ -255,9 +255,9 @@ class OpticFlowApp(BaseApp):
         qv = x.quantile(qv, dim=-1)
         qv = qv.cpu()
 
-        for q, qv in zip(q, qv):
-            n = prefix + "{:.4f}".format(q).rstrip("0").rstrip(".").replace(".", "")
-            metrics[n] = qv
+        for quantile, value in zip(q, qv):
+            n = prefix + f"{quantile:.4f}".rstrip("0").rstrip(".").replace(".", "")
+            metrics[n] = value
 
     def _find_bbox(self, frame: torch.Tensor):
         rows = torch.greater_equal(frame.max(dim=-1)[0], self.black_threshold)
@@ -271,19 +271,19 @@ class OpticFlowApp(BaseApp):
         right = cols.size(-1) - torch.flip(cols, dims=(-1,)).float().argmax(-1)
         right = torch.where(torch.not_equal(is_not_black, 0), right, left)
 
-        return dict(
-            top=top,
-            bottom=bottom,
-            left=left,
-            right=right,
-        )
+        return {
+            "top": top,
+            "bottom": bottom,
+            "left": left,
+            "right": right,
+        }
 
     def _process_luma(self, frame):
         y = frame[:, 0]
         rgb = ycbcr2rgb(frame)
         b = (rgb**2).sum(dim=1).sqrt()
 
-        metrics = dict()
+        metrics = {}
         self._calc_luma_metrics(metrics, "y_", y.flatten(1), self.quantiles)
         self._calc_luma_metrics(metrics, "b_", b.flatten(1), self.quantiles)
 
@@ -314,10 +314,10 @@ class OpticFlowApp(BaseApp):
             def make_skeleton(d, m):
                 for n, v in m.items():
                     if isinstance(v, dict):
-                        d[n] = s = dict()
+                        d[n] = s = {}
                         make_skeleton(s, v)
                     else:
-                        d[n] = list()
+                        d[n] = []
 
             make_skeleton(clip_metrics, metrics)
 

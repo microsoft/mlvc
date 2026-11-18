@@ -4,16 +4,17 @@
 import functools
 import heapq
 import time
-from typing import Iterable, Callable, Any, List, Optional
+from collections.abc import Callable, Iterable
+from typing import Any
 
 __all__ = ["run_distributed"]
 
 
-def split_task_list_by_index(world_size: int, task_list: List):
+def split_task_list_by_index(world_size: int, task_list: list):
     return [idx % world_size for idx in range(len(task_list))]
 
 
-def split_task_list_by_weight(world_size: int, task_list: List, weight_func: Callable[[Any], float]):
+def split_task_list_by_weight(world_size: int, task_list: list, weight_func: Callable[[Any], float]):
     # heap of groups sorted by accumulated weight
     group_list: list[tuple[float, int]] = [(0, rank) for rank in range(world_size)]
     heapq.heapify(group_list)
@@ -40,9 +41,9 @@ def run_task_list(task_list: Iterable, task_processor: Callable):
 
 
 def run_with_progress(
-    task_list: List,
-    list_processor: Optional[Callable[[List], Iterable]],
-    progress_callback: Optional[Callable[[int, int, float], Any]],
+    task_list: list,
+    list_processor: Callable[[list], Iterable] | None,
+    progress_callback: Callable[[int, int, float], Any] | None,
     progress_interval: float,
 ):
     assert list_processor is not None
@@ -62,11 +63,11 @@ def run_distributed(
     rank: int,
     task_list: Iterable,
     *,
-    task_processor: Optional[Callable] = None,
-    list_processor: Optional[Callable[[List], Iterable]] = None,
-    progress_callback: Optional[Callable[[int, int, float], Any]] = None,
+    task_processor: Callable | None = None,
+    list_processor: Callable[[list], Iterable] | None = None,
+    progress_callback: Callable[[int, int, float], Any] | None = None,
     progress_interval: float = 10,
-    weight_func: Optional[Callable[[Any], float]] = None,
+    weight_func: Callable[[Any], float] | None = None,
 ):
     if task_processor is not None:
         if list_processor is not None:
@@ -110,16 +111,17 @@ def run_distributed(
             raise ValueError("Task/result count mismatch")
 
         # collect all results
-        group_result_list: List[Optional[List]] = [None] * world_size
+        group_result_list: list[list | None] = [None] * world_size
         torch.distributed.all_gather_object(group_result_list, rank_result)
 
         # restore result list
         result_list = [None] * len(group_map)
         for group, result in enumerate(group_result_list):
+            assert result is not None  # all_gather_object filled every slot
             # collect group indices
             indices = (idx for idx, g in enumerate(group_map) if g == group)
             # put results into the flat list
-            for idx, r in zip(indices, result):  # type: ignore[arg-type]
+            for idx, r in zip(indices, result):
                 result_list[idx] = r
 
         return result_list

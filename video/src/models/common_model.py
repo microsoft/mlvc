@@ -2,15 +2,15 @@
 # Licensed under the MIT license.
 
 import math
-from typing import Literal, Optional, overload
+from typing import Literal, overload
 
 import torch
 from torch import nn
 
-from .entropy_models import BitEstimator, GaussianEncoder
-from .utils import apply_upper_lower_bound
 from ..utils.onnx_compat import replicate_pad
 from ..utils.stream_helper import get_padding_size
+from .entropy_models import BitEstimator, GaussianEncoder
+from .utils import apply_upper_lower_bound
 
 
 class CompressionModel(nn.Module):
@@ -29,8 +29,8 @@ class CompressionModel(nn.Module):
         bit_estimator_qp_split=False,
         y_distribution_scale_step_in_log_space=True,
         y_distribution_scale_input_in_index_space=False,
-        quant_min: Optional[float] = None,
-        quant_max: Optional[float] = None,
+        quant_min: float | None = None,
+        quant_max: float | None = None,
     ):
         super().__init__()
 
@@ -46,7 +46,7 @@ class CompressionModel(nn.Module):
         if z_channel > 0:
             self.bit_estimator_z = BitEstimator(bit_estimator_qp_number, z_channel)
         else:
-            self.bit_estimator_z = None  # type: ignore[assignment]
+            self.bit_estimator_z = None  # ty: ignore[invalid-assignment]
 
         if mv_z_channel is not None:
             self.bit_estimator_z_mv = BitEstimator(bit_estimator_qp_number, mv_z_channel)
@@ -566,9 +566,9 @@ class CompressionModel(nn.Module):
         """NPU: Estimate second part of params (from first part of y_hat)"""
         params_1 = torch.cat((y_hat_0, params_0), dim=1)
         if update_scales:
-            scales_1, means_1 = self.y_spatial_prior(params_1, **kwargs).chunk(2, 1)  # type: ignore[attr-defined]
+            scales_1, means_1 = self.y_spatial_prior(params_1, **kwargs).chunk(2, 1)  # ty: ignore[call-non-callable]
         else:
-            means_1 = self.y_spatial_prior(params_1, **kwargs)  # type: ignore[attr-defined]
+            means_1 = self.y_spatial_prior(params_1, **kwargs)  # ty: ignore[call-non-callable]
             scales_1 = None
 
         return {

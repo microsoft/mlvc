@@ -1,27 +1,31 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import numpy as np
 from collections import namedtuple
-from ..types import (
-    ModelPartId,
-    RuntimeParams,
-    EncoderOutput,
-    DecoderOutput,
-    ModelData,
-    PaddingMode,
-    PaddingDirection,
-)
+
+import numpy as np
+import torch
+from msrtc.rans import RansDecoderStream
+
 from .._full_model import BaseFullModel
 from .._model_wrapper import ModelWrapper
+from ..types import (
+    DecoderOutput,
+    EncoderOutput,
+    ModelData,
+    ModelPartId,
+    PaddingDirection,
+    PaddingMode,
+    RuntimeParams,
+)
 from ._base_split_model import prepare_model_parts
-from ._dmc61sbr_e1d1 import Encoder as Dmc61sbrEncoder
-from ._dmc61sbr_e1d1 import Decoder as Dmc61sbrDecoder
+from ._dmc61sbr_e1d1 import (
+    Decoder as Dmc61sbrDecoder,
+    Encoder as Dmc61sbrEncoder,
+    ReferenceManager as Dmc61sbrReferenceManager,
+    SplitModel as Dmc61srSplitModel,
+)
 from ._dmc61sr_e1d1 import ReferenceData as Dmc61sbrReferenceData
-from ._dmc61sbr_e1d1 import ReferenceManager as Dmc61sbrReferenceManager
-from ._dmc61sbr_e1d1 import SplitModel as Dmc61srSplitModel
-from msrtc.rans import RansDecoderStream
 
 
 class Encoder(Dmc61sbrEncoder):
@@ -43,7 +47,7 @@ class Encoder(Dmc61sbrEncoder):
         q_index_shifted: torch.Tensor,
     ) -> OutputType:
         x = torch_yuv420_to_yuv444(x_luma, x_chroma, method=self._upsample_method)
-        return super().forward(x, ref_feature, q_index_shifted)  # type: ignore[misc]
+        return super().forward(x, ref_feature, q_index_shifted)
 
 
 class Decoder(Dmc61sbrDecoder):

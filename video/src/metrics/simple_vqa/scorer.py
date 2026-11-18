@@ -5,7 +5,8 @@
 
 import math
 import os
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 import torch
@@ -19,7 +20,7 @@ from .slowfast import slowfast_r50
 def simple_vqa_sample_count(total_frames: int, frame_rate: float) -> int:
     if not math.isfinite(frame_rate) or frame_rate <= 0:
         raise ValueError(f"SimpleVQA requires a positive finite frame rate, got {frame_rate}")
-    rounded_frame_rate = int(round(frame_rate))
+    rounded_frame_rate = round(frame_rate)
     if rounded_frame_rate <= 0:
         raise ValueError(f"SimpleVQA requires a frame rate that rounds to at least one, got {frame_rate}")
     seconds = total_frames // rounded_frame_rate
@@ -55,7 +56,7 @@ class _SlowFastFeatureExtractor:
 
 
 class SimpleVQA:
-    def __init__(self, pretrained_path: Optional[str], device, config: Mapping[str, Any]):
+    def __init__(self, pretrained_path: str | None, device, config: Mapping[str, Any]):
         self.device = device
         checkpoint_path = self._resolve_path(config.get("checkpoint", "SimpleVQA/UGC_BVQA_model.pth"), pretrained_path)
         slowfast_path = self._resolve_path(
@@ -87,7 +88,7 @@ class SimpleVQA:
         )
 
     @staticmethod
-    def _resolve_path(path, pretrained_path: Optional[str]) -> str:
+    def _resolve_path(path, pretrained_path: str | None) -> str:
         path = os.fspath(path)
         if os.path.isabs(path) or os.path.exists(path):
             return os.path.abspath(path)
@@ -110,7 +111,7 @@ class SimpleVQAStream:
         self.metric = metric
         self.total_frames = total_frames
         self.spatial_count = simple_vqa_sample_count(total_frames, frame_rate)
-        self.rounded_frame_rate = int(round(frame_rate))
+        self.rounded_frame_rate = round(frame_rate)
         self.frame_index = 0
         self.spatial_frames = []
         self.completed_motion = {}

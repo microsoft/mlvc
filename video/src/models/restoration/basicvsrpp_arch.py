@@ -23,8 +23,8 @@ import re
 from collections import OrderedDict
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 from torchvision.ops import deform_conv2d
 
 logger = logging.getLogger(__name__)
@@ -297,7 +297,7 @@ class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
         assert last_conv.bias is not None
         nn.init.constant_(last_conv.bias, 0.0)
 
-    def forward(  # type: ignore[override]
+    def forward(
         self,
         x: torch.Tensor,
         extra_feat: torch.Tensor,
@@ -420,9 +420,9 @@ class BasicVSRPlusPlusNet(nn.Module):
         """Propagate features through a single branch with deformable alignment."""
         n, t, _, h, w = flows.size()
 
-        frame_idx = list(range(0, t + 1))
+        frame_idx = list(range(t + 1))
         flow_idx = list(range(-1, t))
-        mapping_idx = list(range(0, len(feats["spatial"])))
+        mapping_idx = list(range(len(feats["spatial"])))
         mapping_idx += mapping_idx[::-1]
 
         if "backward" in module_name:
@@ -487,7 +487,7 @@ class BasicVSRPlusPlusNet(nn.Module):
         """Reconstruct output frames from propagated features."""
         outputs: list[torch.Tensor] = []
         num_outputs = len(feats["spatial"])
-        mapping_idx = list(range(0, num_outputs))
+        mapping_idx = list(range(num_outputs))
         mapping_idx += mapping_idx[::-1]
 
         for i in range(lqs.size(1)):

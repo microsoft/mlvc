@@ -1,34 +1,37 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import numpy as np
 from collections import namedtuple
 from dataclasses import dataclass
-from ..types import (
-    ModelPartId,
-    ModelData,
-    EncoderOutput,
-    DecoderOutput,
-    RuntimeParams,
-    PaddingMode,
-    PaddingDirection,
-)
+
+import numpy as np
+import torch
+from msrtc.rans import RansDecoderStream
+
+from src.models.utils import apply_upper_lower_bound
+from src.utils.stream_helper import get_downsampled_shape
+
 from .._full_model import BaseFullModel
 from .._model_wrapper import ModelWrapper
 from .._scale_decoder import BaseScaleDecoder, UpsampleScaleDecoder
+from ..types import (
+    DecoderOutput,
+    EncoderOutput,
+    ModelData,
+    ModelPartId,
+    PaddingDirection,
+    PaddingMode,
+    RuntimeParams,
+)
 from ._base_split_model import (
-    BaseEncoderPart,
     BaseDecoderPart,
+    BaseEncoderPart,
     BaseReferenceDataWithFrame,
     BaseReferenceManagerGrayFrame,
     BaseSplitModel,
     prepare_model_parts,
 )
 from ._dmc61_e2d3 import EncoderPart2 as Dmc61EncoderPart2
-from src.models.utils import apply_upper_lower_bound
-from src.utils.stream_helper import get_downsampled_shape
-from msrtc.rans import RansDecoderStream
 
 
 class EncoderPart1(BaseEncoderPart):
@@ -55,7 +58,7 @@ class EncoderPart1(BaseEncoderPart):
         results = self.model.compress_core(x=x, dpb=dpb, q_index=q_index_shifted, do_shift_qp=False, get_recon=False)
 
         feature = results["dpb"]["ref_feature"]
-        (y_raw_0, scales_0), (y_raw_1, scales_1) = results["y_raw"]
+        (y_raw_0, _scales_0), (y_raw_1, _scales_1) = results["y_raw"]
         z_raw = results["z_raw"]
 
         return self.OutputType(

@@ -1,12 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from typing import Dict, Any
+from typing import Any
 
 __all__ = ["create_image_model", "create_video_model"]
 
 
-def create_image_model(config: Dict[str, Any]):
+def create_image_model(config: dict[str, Any]):
     model_type = config["type"]
     if model_type == "DMCI-6.0":
         from src.models.dmc_6.dmci_60 import DMCI
@@ -27,7 +27,7 @@ def create_image_model(config: Dict[str, Any]):
     return model
 
 
-def create_video_model(config: Dict[str, Any]):
+def create_video_model(config: dict[str, Any]):
     model_type = config["type"]
     if model_type == "DMC-6.1":
         from src.models.dmc_6.dmc_61 import DMC

@@ -2,7 +2,8 @@
 # Licensed under the MIT license.
 
 import dataclasses
-from .types import ModelOpProfile, ModelOpStats, ModelProfile, CoremlComputeUnits
+
+from .types import CoremlComputeUnits, ModelOpProfile, ModelOpStats, ModelProfile
 
 
 def profile_coreml_model(

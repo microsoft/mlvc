@@ -22,7 +22,7 @@ class FFProbeApp(BaseApp):
 
         video_list_fn = self.resolve_path(self.get_config_by_path("ffprobe.video_list"), default_source=".")
 
-        video_list = list()
+        video_list = []
         with open(video_list_fn, "rt", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -93,7 +93,7 @@ class FFProbeApp(BaseApp):
 
         args.append(filename)
         try:
-            rc = subprocess.run(args, cwd=source_dir, stdin=None, capture_output=True)
+            rc = subprocess.run(args, cwd=source_dir, stdin=None, capture_output=True, check=False)
         except BaseException:
             logging.error(f"{filename}: processing failed")
             raise

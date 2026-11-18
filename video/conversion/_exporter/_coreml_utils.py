@@ -1,16 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-# pyright: reportAttributeAccessIssue=false
-# pyright: reportOptionalOperand=false
-# pyright: reportOperatorIssue=false
-# pyright: reportArgumentType=false
 import numpy as np
+from coremltools.converters.mil.mil import Builder as mb
 from coremltools.converters.mil.mil.passes.graph_pass import AbstractGraphPass
 from coremltools.converters.mil.mil.passes.helper import block_context_manager
 from coremltools.converters.mil.mil.passes.pass_registry import register_pass
 from coremltools.converters.mil.mil.scope import ScopeInfo, ScopeSource
-from coremltools.converters.mil.mil import Builder as mb
 
 
 @register_pass(namespace="mlvc")
@@ -33,10 +29,10 @@ class fast_prediction_workaround(AbstractGraphPass):
         if act_op.x.shape[1] <= 1024:
             # Workaround is only needed if the number of channels is high
             return False
-        split_op = list(act_op.outputs[0].child_ops)[0]
+        split_op = next(iter(act_op.outputs[0].child_ops))
         if not self._check_next_op_type(split_op, "add"):
             return False
-        add_op = list(split_op.outputs[0].child_ops)[0]
+        add_op = next(iter(split_op.outputs[0].child_ops))
 
         # Add "split -> 2 x activation -> add" operations
         new_split_x, new_split_y = mb.split(
@@ -359,9 +355,10 @@ class dummy_quantize_outputs(AbstractGraphPass):
             return False
 
         for output in op.outputs:
+            # coremltools annotates ScopeInfo.source as str (it requires a ScopeSource) and *scopes as List[ScopeInfo]
             with mb.scope(
-                ScopeInfo(source=ScopeSource.TORCHSCRIPT_MODULE_TYPE, data=["dummy_output_quant"]),
-                ScopeInfo(source=ScopeSource.TORCHSCRIPT_MODULE_NAME, data=["dummy_output_quant"]),
+                ScopeInfo(source=ScopeSource.TORCHSCRIPT_MODULE_TYPE, data=["dummy_output_quant"]),  # ty: ignore[invalid-argument-type]
+                ScopeInfo(source=ScopeSource.TORCHSCRIPT_MODULE_NAME, data=["dummy_output_quant"]),  # ty: ignore[invalid-argument-type]
             ):
                 quantize_op = mb.quantize(
                     input=output,
@@ -454,7 +451,7 @@ class split_gated_conv(AbstractGraphPass):
     # Skip splitting these convolutions to keep encoder and decoder consistent.
     # In the encoder the conv output has two consumers so the pattern doesn't match,
     # but in the decoder it does. Skipping avoids a mismatch between the two.
-    skip_names = {"means"}
+    skip_names = frozenset({"means"})
 
     def apply(self, prog):
         for f in prog.functions.values():
@@ -475,9 +472,8 @@ class split_gated_conv(AbstractGraphPass):
         if groups_val != 1:
             return False
 
-        if self.skip_names is not None:
-            if any(substr in conv_op.name for substr in self.skip_names):
-                return False
+        if self.skip_names is not None and any(substr in conv_op.name for substr in self.skip_names):
+            return False
 
         # Must have exactly one consumer: a split along channels
         if len(conv_op.outputs) != 1:
@@ -499,9 +495,12 @@ class split_gated_conv(AbstractGraphPass):
         if self.min_chunk_size is not None and chunk < self.min_chunk_size:
             return False
 
-        if split_op.split_sizes is not None and split_op.split_sizes.val is not None:
-            if any(s != chunk for s in split_op.split_sizes.val):
-                return False
+        if (
+            split_op.split_sizes is not None
+            and split_op.split_sizes.val is not None
+            and any(s != chunk for s in split_op.split_sizes.val)
+        ):
+            return False
 
         max_splits = int(self.max_splits) if self.max_splits is not None else None
         if max_splits is not None and num_splits > max_splits:
@@ -512,7 +511,12 @@ class split_gated_conv(AbstractGraphPass):
         # Build N new conv ops
         def make_conv(i):
             w = weight[i * chunk : (i + 1) * chunk]
-            kwargs = dict(x=conv_op.x, weight=w, name=f"{conv_op.name}_split_{chr(ord('a') + i)}", before_op=split_op)
+            kwargs = {
+                "x": conv_op.x,
+                "weight": w,
+                "name": f"{conv_op.name}_split_{chr(ord('a') + i)}",
+                "before_op": split_op,
+            }
             if bias is not None:
                 kwargs["bias"] = bias[i * chunk : (i + 1) * chunk]
             return mb.conv(**kwargs)

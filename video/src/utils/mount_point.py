@@ -18,13 +18,13 @@ class MountPointResolver:
 
         store_regions = args.store_regions
         if store_regions is None or store_regions == "":
-            store_regions = tuple()
+            store_regions = ()
         else:
             store_regions = store_regions.split(",")
         self._store_regions = store_regions
 
         self._region = None
-        self._mount_point_map = dict()
+        self._mount_point_map = {}
 
     def resolve_mount(self, mount_name: str):
         mount_point = self._mount_point_map.get(mount_name)
@@ -88,7 +88,7 @@ class MountPointResolver:
 
         # see https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service
         request = urllib.request.Request(
-            "http://169.254.169.254/metadata/instance?api-version=2021-02-01", headers=dict(Metadata="true")
+            "http://169.254.169.254/metadata/instance?api-version=2021-02-01", headers={"Metadata": "true"}
         )
         with urllib.request.urlopen(request) as f:
             response = json.load(f)

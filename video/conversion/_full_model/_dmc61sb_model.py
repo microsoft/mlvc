@@ -1,13 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import torch.nn as nn
 import dataclasses
-from ._base_model import BaseFullModel
-from src.utils.conv_fusion import fuse_conv_chain, fuse_subpel_chain
-from src.models.dmc_6.layers import SubpelConv2x, SubpelConvNx
+
+import torch
+from torch import nn
+
 from src.models.dmc_6.dmc_61sb import DMC
+from src.models.dmc_6.layers import SubpelConv2x, SubpelConvNx
+from src.utils.conv_fusion import fuse_conv_chain, fuse_subpel_chain
+
+from ._base_model import BaseFullModel
 
 
 class TraceableMLVC(BaseFullModel, DMC):
@@ -128,11 +131,11 @@ class TraceableMLVC(BaseFullModel, DMC):
         in_ch = convs[0].in_channels
         out_ch = convs[-1].out_channels
         fused_weight, fused_bias, stride = fuse_conv_chain(convs)
-        new_model = nn.Conv2d(in_ch, out_ch, kernel_size=stride, stride=stride)  # type: ignore[arg-type]
+        new_model = nn.Conv2d(in_ch, out_ch, kernel_size=stride, stride=stride)  # ty: ignore[invalid-argument-type]
         new_model.weight.data = fused_weight
         assert new_model.bias is not None
         new_model.bias.data = fused_bias
-        self.hyper_encoder.conv = new_model  # type: ignore[assignment]
+        self.hyper_encoder.conv = new_model  # ty: ignore[invalid-assignment]
 
     @torch.no_grad()
     def _fuse_hyperdecoder(self):
@@ -143,8 +146,8 @@ class TraceableMLVC(BaseFullModel, DMC):
             return
 
         print(f"Fusing {len(subpels)} hyperdecoder subpel conv layers...")
-        in_ch = subpels[0].conv[0].in_channels  # type: ignore[index]
-        out_ch = subpels[-1].conv[0].out_channels // 4  # type: ignore[index]
+        in_ch = subpels[0].conv[0].in_channels  # ty: ignore[not-subscriptable, missing-union-attribute]
+        out_ch = subpels[-1].conv[0].out_channels // 4  # ty: ignore[not-subscriptable, missing-union-attribute]
         fused_weight, fused_bias, factor = fuse_subpel_chain(subpels)
         new_model = SubpelConvNx(in_ch, out_ch, factor, 1)
         new_model.conv.weight.data = fused_weight
@@ -152,7 +155,7 @@ class TraceableMLVC(BaseFullModel, DMC):
             new_model.conv.bias = nn.Parameter(fused_bias.clone())
         else:
             new_model.conv.bias.data = fused_bias
-        self.hyper_decoder.conv = new_model  # type: ignore[assignment]
+        self.hyper_decoder.conv = new_model  # ty: ignore[invalid-assignment]
 
     def optimize_structure(self):
         super().optimize_structure()

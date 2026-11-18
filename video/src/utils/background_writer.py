@@ -5,8 +5,8 @@
 
 import logging
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Callable
 
 
 class BackgroundWriter:

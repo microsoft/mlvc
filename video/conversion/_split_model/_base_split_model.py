@@ -1,38 +1,41 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import numpy as np
-from dataclasses import dataclass, replace
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, replace
 from typing import Any
+
+import numpy as np
+import torch
+from msrtc.rans import RansDecoderStream, RansEncoderStream
+
+from src.utils.stream_helper import get_downsampled_shape, get_padding_size
+
+from .._coder import BitEstimator, GaussianEncoder
 from .._full_model import BaseFullModel
-from ..types import (
-    ModelPartId,
-    ModelParams,
-    EncoderOutput,
-    DecoderOutput,
-    SplitModelParams,
-    RuntimeParams,
-    ModelPartMetadata,
-    ModelFieldMetadata,
-    ModelPrecision,
-    ModelType,
-    ConversionMetadata,
-    PaddingMode,
-    PaddingDirection,
-)
 from .._model_wrapper import ModelWrapper
 from .._scale_decoder import BaseScaleDecoder
-from .._coder import GaussianEncoder, BitEstimator
-from ..utils import yuv_444_to_420, yuv_420_to_444
-from src.utils.stream_helper import get_padding_size, get_downsampled_shape
-from msrtc.rans import RansEncoderStream, RansDecoderStream
+from ..types import (
+    ConversionMetadata,
+    DecoderOutput,
+    EncoderOutput,
+    ModelFieldMetadata,
+    ModelParams,
+    ModelPartId,
+    ModelPartMetadata,
+    ModelPrecision,
+    ModelType,
+    PaddingDirection,
+    PaddingMode,
+    RuntimeParams,
+    SplitModelParams,
+)
+from ..utils import yuv_420_to_444, yuv_444_to_420
 
 
 def prepare_model_parts(torch_model_parts, runtime_params):
     model_parts = {}
-    for model_part_id in torch_model_parts.keys():
+    for model_part_id in torch_model_parts:
         model = torch_model_parts[model_part_id]
         model.eval()
 
@@ -65,7 +68,7 @@ class BaseModelPart(ABC, torch.nn.Module):
 
     def __init__(
         self,
-        model: torch.nn.Module,
+        model: BaseFullModel,
         height: int,
         width: int,
         **kwargs,
@@ -383,14 +386,15 @@ class BaseSplitModel(ABC):
                 constant_values=0.5,
             )
         else:
+            padding_kwargs: dict[str, Any]
             if padding_mode == PaddingMode.CONSTANT_GRAY:
-                padding_kwargs = dict(mode="constant", constant_values=0.5)
+                padding_kwargs = {"mode": "constant", "constant_values": 0.5}
             elif padding_mode == PaddingMode.CONSTANT_BLACK:
-                padding_kwargs = dict(mode="constant", constant_values=0.0)
+                padding_kwargs = {"mode": "constant", "constant_values": 0.0}
             elif padding_mode == PaddingMode.CONSTANT_WHITE:
-                padding_kwargs = dict(mode="constant", constant_values=1.0)
+                padding_kwargs = {"mode": "constant", "constant_values": 1.0}
             else:
-                padding_kwargs = dict(mode=padding_mode.value)
+                padding_kwargs = {"mode": padding_mode.value}
 
             x = np.pad(
                 x,
@@ -400,7 +404,7 @@ class BaseSplitModel(ABC):
                     (padding[2], padding[3]),
                     (padding[0], padding[1]),
                 ),
-                **padding_kwargs,  # type: ignore[arg-type]
+                **padding_kwargs,
             )
 
         assert x.shape[1] == 3
@@ -434,8 +438,8 @@ class BaseSplitModel(ABC):
         # Convert to 0-1 range
         yuv444 /= self._full_model.model_params.pixel_range
 
-        yuv420 = yuv_444_to_420(yuv444)
-        return tuple(t.astype(np.float32, copy=False) for t in yuv420)  # type: ignore[return-value]
+        y, u, v = (t.astype(np.float32, copy=False) for t in yuv_444_to_420(yuv444))
+        return y, u, v
 
     def _get_fa_idx(self, frame_index: int) -> int:
         model_params = self._full_model.model_params

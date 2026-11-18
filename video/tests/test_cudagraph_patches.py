@@ -7,7 +7,6 @@ import copy
 
 import pytest
 import torch
-
 from torch._inductor import cudagraph_trees
 
 from src.utils import cudagraph_patches
@@ -24,7 +23,7 @@ def test_indexed_lookup_matches_original_scan_for_chained_calls(monkeypatch):
         ("_is_cuda_graph_recorded_tensor", cudagraph_patches._original_is_cuda_graph_recorded_tensor),
     ):
 
-        def checked(self, t, indexed=getattr(node_cls, name), original=original):
+        def checked(self, t, indexed=getattr(node_cls, name), original=original):  # noqa: B008 - captures the method before monkeypatch replaces it
             result = indexed(self, t)
             assert result == original(self, t)
             return result

@@ -306,7 +306,7 @@ class RestoreVimeoBasicVSRPP(BaseApp):
         return tasks, description_path
 
     def _run_image_sequences(self):
-        tasks, description_path = self._load_tasks()
+        tasks, _description_path = self._load_tasks()
 
         self._out_format = str(self.get_config_by_path("output.format", default="auto")).lower()
         valid_formats = ("auto",) + tuple(_FORMAT_TO_EXT.keys())

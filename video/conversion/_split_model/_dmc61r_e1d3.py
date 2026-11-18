@@ -1,32 +1,33 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import numpy as np
 from collections import namedtuple
 from dataclasses import dataclass
-from ..types import (
-    ModelPartId,
-    ModelData,
-    EncoderOutput,
-    DecoderOutput,
-    RuntimeParams,
-    PaddingMode,
-    PaddingDirection,
-)
+
+import numpy as np
+import torch
+from msrtc.rans import RansDecoderStream
+
 from .._full_model import BaseFullModel
 from .._model_wrapper import ModelWrapper
+from ..types import (
+    DecoderOutput,
+    EncoderOutput,
+    ModelData,
+    ModelPartId,
+    PaddingDirection,
+    PaddingMode,
+    RuntimeParams,
+)
 from ._base_split_model import (
-    BaseEncoderPart,
     BaseDecoderPart,
+    BaseEncoderPart,
     BaseReferenceData,
     BaseReferenceManager,
     BaseSplitModel,
     prepare_model_parts,
 )
-from ._dmc61_e2d3 import DecoderPart2 as Dmc61DecoderPart2
-from ._dmc61_e2d3 import DecoderPart3 as Dmc61DecoderPart3
-from msrtc.rans import RansDecoderStream
+from ._dmc61_e2d3 import DecoderPart2 as Dmc61DecoderPart2, DecoderPart3 as Dmc61DecoderPart3
 
 
 class Encoder(BaseEncoderPart):
@@ -107,7 +108,7 @@ class ReferenceManager(BaseReferenceManager):
         self._buffer[frame_idx] = ReferenceData(ref_feature=model_outputs.feature.copy())
 
     def load(self, ref_frame_idx: int | None, feature_reset: bool = False) -> ReferenceData:
-        return super().load(ref_frame_idx, feature_reset=feature_reset)  # type: ignore[return-value]
+        return super().load(ref_frame_idx, feature_reset=feature_reset)  # ty: ignore[invalid-return-type]
 
 
 class SplitModel(BaseSplitModel):

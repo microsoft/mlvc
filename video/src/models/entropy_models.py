@@ -4,17 +4,17 @@
 import abc
 import itertools
 import math
+from collections.abc import Sequence
 from numbers import Integral
-from typing import Optional, Sequence
 
-import torch
 import numpy as np
-from torch import nn
+import torch
 import torch.nn.functional as F
+from torch import nn
 
 from src.models.utils import apply_upper_lower_bound
 
-__all__ = ["quantize_pmf", "BitEstimator", "GaussianEncoder"]
+__all__ = ["BitEstimator", "GaussianEncoder", "quantize_pmf"]
 
 
 def quantize_pmf(pmf, scale_bits: int):
@@ -78,7 +78,7 @@ def quantize_pmf(pmf, scale_bits: int):
 def quantize_pmf_set(pmf, tail_mass, pmf_length):
     entropy_coder_precision = 16
 
-    pmf_list = list()
+    pmf_list = []
     for p, t, length in itertools.zip_longest(pmf, tail_mass, pmf_length):
         p = np.concatenate((p[:length], t), axis=0)
         q = quantize_pmf(p, entropy_coder_precision)
@@ -263,7 +263,7 @@ class BitEstimator(AEHelper, nn.Module):
 
             samples = samples[None, None, None, :] + pmf_start
 
-            half = float(0.5)
+            half = 0.5
 
             lower = self.forward(samples - half, index)
             upper = self.forward(samples + half, index)
@@ -357,7 +357,7 @@ class GaussianEncoder(AEHelper):
     def get_gaussian_prob(values, scales):
         # noinspection PyUnusedLocal
         def _standardized_cumulative(inputs):
-            half = float(0.5)
+            half = 0.5
             const = float(-(2**-0.5))
             # Using the complementary error function maximizes numerical precision.
             return half * torch.erfc(const * inputs)
@@ -438,7 +438,7 @@ class GaussianEncoder(AEHelper):
         else:
             return self.scale_min + self.scale_step * indices
 
-    def build_indices(self, scales, skip_thres=None, calibration_indices: Optional[torch.Tensor] = None):
+    def build_indices(self, scales, skip_thres=None, calibration_indices: torch.Tensor | None = None):
         if not self.scale_input_in_index_space:
             indices = self.convert_scales_to_indices(scales, clamp=False)
         else:

@@ -75,8 +75,9 @@ def test_simple_vqa_inference_matches_expected_score(tmp_path):
 
 
 def stream_metric_stub(monkeypatch):
-    from src.metrics.simple_vqa.scorer import SimpleVQA
     from torchvision import transforms
+
+    from src.metrics.simple_vqa.scorer import SimpleVQA
 
     metric = SimpleVQA.__new__(SimpleVQA)
     metric.device = "cpu"
@@ -147,10 +148,10 @@ def test_simple_vqa_receives_each_reconstruction_without_decoder_folder(determin
     from src.metrics.simple_vqa.scorer import SimpleVQAStream
     from src.transforms.functional import yuv_444_to_420
     from src.utils.encoder_tester import (
-        EncoderTestTaskProcessor,
-        EncoderTestTask,
-        EncoderTestTaskQPoint,
         EncoderTestParams,
+        EncoderTestTask,
+        EncoderTestTaskProcessor,
+        EncoderTestTaskQPoint,
     )
 
     metric = stream_metric_stub(monkeypatch)
@@ -200,6 +201,41 @@ def test_simple_vqa_receives_each_reconstruction_without_decoder_folder(determin
         torch.use_deterministic_algorithms(before, warn_only=warn_only)
 
 
+def test_simple_vqa_error_is_logged_with_traceback(caplog):
+    from src.utils.encoder_tester import (
+        EncoderTestParams,
+        EncoderTestTask,
+        EncoderTestTaskProcessor,
+        EncoderTestTaskQPoint,
+    )
+
+    tester = EncoderTestTaskProcessor.__new__(EncoderTestTaskProcessor)
+    tester.task = EncoderTestTask(
+        params=EncoderTestParams(is_yuv420=False, calc_psnr=False, calc_simple_vqa=True),
+        dataset_name="test",
+        seq_name="clip",
+        src_type="png",
+        src_path="",
+        src_width=6,
+        src_height=4,
+        n_frames=20,
+        frame_rate=10,
+        intra_period=1024,
+        q_points=[EncoderTestTaskQPoint("a")],
+        decoder_format="mp4",
+    )
+    tester._simple_vqa_streams = [None]
+    tester._simple_vqa_errors = [None]
+
+    error = RuntimeError("scoring failed")
+    try:
+        raise error
+    except RuntimeError as caught:
+        tester._record_simple_vqa_error(0, caught)
+
+    assert caplog.records[-1].exc_info == (RuntimeError, error, error.__traceback__)
+
+
 def test_simple_vqa_benchmark_uses_existing_ffmpeg_reader(tmp_path, monkeypatch):
     from src.transforms.functional import yuv_420_to_444
     from src.utils import frame_reader_model_adapter as adapter
@@ -245,7 +281,7 @@ def test_simple_vqa_benchmark_uses_existing_ffmpeg_reader(tmp_path, monkeypatch)
     torch.testing.assert_close(result["x_hat"], expected)
     torch.testing.assert_close(result["bits"], torch.tensor([123.0]))
     assert model.frame_rate == 15
-    assert calls == [(str(tmp_path / "test" / "clip_qp0.mp4"), dict(width=6, height=4, dst_format="420"))]
+    assert calls == [(str(tmp_path / "test" / "clip_qp0.mp4"), {"width": 6, "height": 4, "dst_format": "420"})]
 
 
 @pytest.mark.parametrize(

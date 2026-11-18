@@ -1,11 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import torch
-import openvino as ov  # type: ignore[import-not-found]
 from pathlib import Path
+
+import openvino as ov
+import torch
+
+from ..types import ModelData, ModelPartMetadata, ModelPrecision, ModelType, TensorLayout
 from ._onnx_exporter import OnnxExporter
-from ..types import ModelType, ModelPrecision, ModelData, TensorLayout, ModelPartMetadata
 
 
 class OpenvinoExporter(OnnxExporter):

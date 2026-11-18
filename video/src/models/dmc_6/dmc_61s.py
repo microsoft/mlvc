@@ -1,27 +1,28 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...utils.stream_helper import (
+    check_decoder_eof,
+    flush_encoder_streams,
+    get_downsampled_shape,
+    open_decoder_streams,
+    open_encoder_streams,
+)
 from ..common_model import CompressionModel
+from ..utils import CkptModule, apply_upper_lower_bound
 from .layers import (
-    SubpelConv2x,
     DepthConvBlock,
-    ResidualBlockUpsample,
-    ResidualBlockWithStride2,
     DMCConv2d,
     NetworkMode,
-)
-from ..utils import apply_upper_lower_bound, CkptModule
-from ...utils.stream_helper import (
-    get_downsampled_shape,
-    open_encoder_streams,
-    flush_encoder_streams,
-    open_decoder_streams,
-    check_decoder_eof,
+    ResidualBlockUpsample,
+    ResidualBlockWithStride2,
+    SubpelConv2x,
 )
 
 
@@ -29,7 +30,7 @@ class FeatureExtractor(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
 
         self.conv1 = nn.Sequential(
             DepthConvBlock(in_ch, mid_ch, **block_args),
@@ -61,7 +62,7 @@ class FeatureAdaptorI(CkptModule):
     def __init__(self, in_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         self.conv = DepthConvBlock(in_ch, out_ch, **block_args)
 
     def internal_forward(self, x):
@@ -93,7 +94,7 @@ class Encoder(CkptModule):
         self.pixel_shuffle_factor = pixel_shuffle_factor
 
         conv_args = {"network_mode": network_mode}
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
 
         self.conv1 = DMCConv2d(in_ch, mid_ch, 1, **conv_args)
         self.conv2 = nn.Sequential(
@@ -117,7 +118,7 @@ class Decoder(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         conv_args = {"network_mode": network_mode}
 
         self.up = SubpelConv2x(in_ch, mid_ch, 3, padding=1, network_mode=network_mode)
@@ -151,7 +152,7 @@ class ReconGeneration(CkptModule):
         self.pixel_shuffle_factor = pixel_shuffle_factor
 
         conv_args = {"network_mode": network_mode}
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
 
         self.conv = nn.Sequential(
             DepthConvBlock(in_ch, mid_ch, **block_args),
@@ -173,8 +174,11 @@ class HyperEncoder(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
-        residual_block_args = {"depth_conv_block_params": depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
+        residual_block_args: dict[str, Any] = {
+            "depth_conv_block_params": depth_conv_block_params,
+            "network_mode": network_mode,
+        }
 
         self.conv = nn.Sequential(
             DepthConvBlock(in_ch, mid_ch, **block_args),
@@ -191,8 +195,11 @@ class HyperDecoder(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
-        residual_block_args = {"depth_conv_block_params": depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
+        residual_block_args: dict[str, Any] = {
+            "depth_conv_block_params": depth_conv_block_params,
+            "network_mode": network_mode,
+        }
 
         self.conv = nn.Sequential(
             ResidualBlockUpsample(in_ch, mid_ch, **residual_block_args),
@@ -209,7 +216,7 @@ class PriorFusion(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         conv_args = {"network_mode": network_mode}
 
         self.conv = nn.Sequential(
@@ -227,7 +234,7 @@ class SpatialPrior(CkptModule):
     def __init__(self, in_ch: int, mid_ch: int, out_ch: int, depth_conv_block_params: dict, network_mode: NetworkMode):
         super().__init__()
 
-        block_args = {**depth_conv_block_params, "network_mode": network_mode}
+        block_args: dict[str, Any] = {**depth_conv_block_params, "network_mode": network_mode}
         conv_args = {"network_mode": network_mode}
 
         self.conv = nn.Sequential(
@@ -254,7 +261,7 @@ class DMC(CompressionModel):
         y_channels: int = 128,
         spatial_prior_channels: int = 384,
         pixel_shuffle_factor: int = 8,
-        input_offset: Optional[float] = None,
+        input_offset: float | None = None,
         qp_shift: Sequence[int] = (0, 8, 4),
         network_mode: NetworkMode = NetworkMode.FP32,
     ):
@@ -564,17 +571,17 @@ class DMC(CompressionModel):
         if x_hat is not None:
             x_hat = self.unshift_output(x_hat)
 
-        dpb = dict(
-            ref_frame=x_hat,
-            ref_feature=feature,
-        )
+        dpb = {
+            "ref_frame": x_hat,
+            "ref_feature": feature,
+        }
 
-        result = dict(
-            dpb=dpb,
-            q_index=q_index,
-            z_raw=z_raw,
-            y_raw=y_raw,
-        )
+        result = {
+            "dpb": dpb,
+            "q_index": q_index,
+            "z_raw": z_raw,
+            "y_raw": y_raw,
+        }
 
         return result
 
@@ -594,11 +601,11 @@ class DMC(CompressionModel):
 
         bit_stream = flush_encoder_streams(streams)
 
-        result = dict(
-            x_hat=dpb["ref_frame"],
-            dpb=dpb,
-            bit_stream=bit_stream,
-        )
+        result = {
+            "x_hat": dpb["ref_frame"],
+            "dpb": dpb,
+            "bit_stream": bit_stream,
+        }
 
         if calc_bits_estimates:
             bits_y = self.get_y_bits_estimate(y_raw)
@@ -646,12 +653,12 @@ class DMC(CompressionModel):
         x_hat, feature = self.get_recon_and_feature(y_hat, ctx, q_decoder, q_index)
         x_hat = self.unshift_output(x_hat)
 
-        dpb = dict(
-            ref_frame=x_hat,
-            ref_feature=feature,
-        )
+        dpb = {
+            "ref_frame": x_hat,
+            "ref_feature": feature,
+        }
 
-        return dict(x_hat=x_hat, dpb=dpb)
+        return {"x_hat": x_hat, "dpb": dpb}
 
     def forward(self, x, dpb, *, q_index, fa_idx):
         result = self.compress_core(x, dpb, q_index, fa_idx)
@@ -675,13 +682,13 @@ class DMC(CompressionModel):
         bpp_z = bits_z / pixel_num
         bpp = bits / pixel_num
 
-        return dict(
-            bpp_y=bpp_y,
-            bpp_z=bpp_z,
-            bpp=bpp,
-            dpb=dpb,
-            x_hat=dpb["ref_frame"],
-            bits=bits,
-            bits_y=bits_y,
-            bits_z=bits_z,
-        )
+        return {
+            "bpp_y": bpp_y,
+            "bpp_z": bpp_z,
+            "bpp": bpp,
+            "dpb": dpb,
+            "x_hat": dpb["ref_frame"],
+            "bits": bits,
+            "bits_y": bits_y,
+            "bits_z": bits_z,
+        }

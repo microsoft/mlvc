@@ -2,63 +2,64 @@
 # Licensed under the MIT license.
 
 import copy
-import re
 import dataclasses
 import functools
 import json
 import logging
 import numbers
 import os
+import re
 import shlex
 import time
-from typing import Any, Optional, Sequence, Callable, List, Union, Dict, TYPE_CHECKING
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.utils.data
 from PIL import Image
+from torch import nn
 
-from .common import dump_json, downsample_mask, AuxiliaryModels
-from .distributed.operations import run_distributed
-from .rate_controller import FrameType as RateControllerFrameType, LeakyBucket, RateController
-from .stream_helper import prepare_frame, is_bytes_like, PaddingMode, PaddingAlignment
-from .video_reader import PNGReader, YUVReader
-from .video_writer import PNGWriter, YUVWriter, FFMpegWriter
 from ..metrics.msssim import MS_SSIM
 from ..metrics.vif import VIF
 from ..models.segment import FaRLModel
-from ..transforms.functional import yuv_444_to_420, ycbcr2rgb, rgb2ycbcr, yuv_420_to_444
+from ..transforms.functional import rgb2ycbcr, ycbcr2rgb, yuv_420_to_444, yuv_444_to_420
+from .common import AuxiliaryModels, downsample_mask, dump_json
+from .distributed.operations import run_distributed
+from .rate_controller import FrameType as RateControllerFrameType, LeakyBucket, RateController
+from .stream_helper import PaddingAlignment, PaddingMode, is_bytes_like, prepare_frame
+from .video_reader import PNGReader, YUVReader
+from .video_writer import FFMpegWriter, PNGWriter, YUVWriter
 
 if TYPE_CHECKING:
     from ..metrics.simple_vqa.scorer import SimpleVQAStream
 
 __all__ = [
-    "EncoderTestParams",
-    "run_encoder_test",
-    "EncoderTestTask",
     "EncoderTestDataset",
-    "EncoderTester",
+    "EncoderTestParams",
+    "EncoderTestTask",
     "EncoderTestTaskProcessor",
-    "identity_collate_fn",
+    "EncoderTester",
     "create_frame_reader",
+    "identity_collate_fn",
+    "run_encoder_test",
 ]
 
 
 @dataclasses.dataclass
 class EncoderTestParams:
     is_yuv420: bool
-    i_frame_q_index_list: Optional[Sequence[int] | Dict[str, Sequence[int]]] = None
-    p_frame_q_index_list: Optional[Sequence[int] | Dict[str, Sequence[int]]] = None
-    bitrate_list: Optional[Sequence[float] | Dict[str, Sequence[float]]] = None
+    i_frame_q_index_list: Sequence[int] | dict[str, Sequence[int]] | None = None
+    p_frame_q_index_list: Sequence[int] | dict[str, Sequence[int]] | None = None
+    bitrate_list: Sequence[float] | dict[str, Sequence[float]] | None = None
     float16: bool = False
     frame_step: int = 1
-    max_n_frames: Optional[int] = None
-    intra_period: Optional[int] = None
-    reset_period: Optional[int] = None
+    max_n_frames: int | None = None
+    intra_period: int | None = None
+    reset_period: int | None = None
     padding_mode: PaddingMode = PaddingMode.REPLICATE
     padding_alignment: PaddingAlignment = PaddingAlignment.BOTTOM_RIGHT
-    padding_resolution: Optional[str] = None  # WxH
+    padding_resolution: str | None = None  # WxH
     calc_ssim: bool = False
     calc_ssim_rgb: bool = False
     calc_vif: bool = False
@@ -74,22 +75,22 @@ class EncoderTestParams:
     use_decoder: bool = False
     use_i_frame_model: bool = True
     i_frame_pass_count: int = 1
-    i_frame_qp_shift: Optional[int] = None
-    ltr_period: Optional[int] = None
-    ltr_start_idx: Optional[int] = None
-    ltr_qp_shift: Optional[int] = None
+    i_frame_qp_shift: int | None = None
+    ltr_period: int | None = None
+    ltr_start_idx: int | None = None
+    ltr_qp_shift: int | None = None
     calc_bits_estimates: bool = False
-    stream_folder_path: Optional[str] = None
-    frame_rate: Optional[numbers.Number] = None
-    decoder_folder_path: Optional[str] = None
-    decoder_filename_format: Optional[str] = None
-    decoder_format: Optional[str] = None
-    decoder_compression_options: Optional[str] = None
-    lr_model_data_path: Optional[str] = None
+    stream_folder_path: str | None = None
+    frame_rate: numbers.Number | None = None
+    decoder_folder_path: str | None = None
+    decoder_filename_format: str | None = None
+    decoder_format: str | None = None
+    decoder_compression_options: str | None = None
+    lr_model_data_path: str | None = None
     max_batch_size: int = 1
     verbose: int = 0
     verbose_json: bool = False
-    precomputed_masks_path: Optional[str] = None
+    precomputed_masks_path: str | None = None
     calc_ane_divergence: bool = False
     ane_exact_conv: bool = False
 
@@ -101,12 +102,12 @@ class EncoderTestTaskQPoint:
     """
 
     qp_desc: str
-    i_frame_q_index: Optional[int] = None
-    p_frame_q_index: Optional[int] = None
-    bitrate: Optional[float] = None
+    i_frame_q_index: int | None = None
+    p_frame_q_index: int | None = None
+    bitrate: float | None = None
 
-    decoded_path: Optional[str] = None
-    stream_path: Optional[str] = None
+    decoded_path: str | None = None
+    stream_path: str | None = None
 
 
 @dataclasses.dataclass
@@ -127,10 +128,10 @@ class EncoderTestTask:
     q_points: Sequence[EncoderTestTaskQPoint]
     decoder_format: str
 
-    lr_model_data_filepath: Optional[dict] = None
-    mask_path_root: Optional[str] = None
-    target_type: Optional[str] = None
-    target_path: Optional[str] = None
+    lr_model_data_filepath: dict | None = None
+    mask_path_root: str | None = None
+    target_type: str | None = None
+    target_path: str | None = None
 
 
 def create_frame_reader(task, *, target=False):
@@ -254,10 +255,10 @@ class EncoderTestTaskProcessor:
         self,
         task: EncoderTestTask,
         *,
-        i_frame_model: Optional[nn.Module],
-        p_frame_model: Optional[nn.Module],
-        auxiliary_models: Optional[AuxiliaryModels] = None,
-        read_one_frame: Optional[Callable] = None,
+        i_frame_model: nn.Module | None,
+        p_frame_model: nn.Module | None,
+        auxiliary_models: AuxiliaryModels | None = None,
+        read_one_frame: Callable | None = None,
     ):
         self.task = task
         self.i_frame_model = i_frame_model
@@ -272,8 +273,8 @@ class EncoderTestTaskProcessor:
             if auxiliary_models is None:
                 raise ValueError("SimpleVQA requires auxiliary model configuration")
             self._simple_vqa = auxiliary_models.simple_vqa_model
-        self._simple_vqa_streams: List[Optional["SimpleVQAStream"]] = []
-        self._simple_vqa_errors: List[Optional[str]] = []
+        self._simple_vqa_streams: list[SimpleVQAStream | None] = []
+        self._simple_vqa_errors: list[str | None] = []
         self._simple_vqa_frame_rate = task.frame_rate
         if (
             self._simple_vqa is not None
@@ -349,7 +350,7 @@ class EncoderTestTaskProcessor:
         else:
             self.rec_frame_writer_list = None
 
-        self._rate_controllers: Optional[list[RateController]] = None
+        self._rate_controllers: list[RateController] | None = None
         if task.params.bitrate_list is not None:
             self._rate_controllers = []
             for task_qp in task.q_points:
@@ -390,7 +391,7 @@ class EncoderTestTaskProcessor:
             self._lpips = None
 
         self._segmentation_model = None
-        self._mask_reader: Optional[_CachedMaskReader] = None
+        self._mask_reader: _CachedMaskReader | None = None
         self._farl_nondeterministic_logged = False
         if task.params.calc_psnr_roi:
             if task.mask_path_root:
@@ -434,8 +435,8 @@ class EncoderTestTaskProcessor:
         self.start_time = time.time()
 
         self.frame_pixel_num = 0
-        self.frame_types = list()
-        self.frame_stats = dict()
+        self.frame_types = []
+        self.frame_stats = {}
         self.rgb_frame_buffer = [[] for _ in range(len(task.q_points))]
 
     def __enter__(self):
@@ -527,11 +528,8 @@ class EncoderTestTaskProcessor:
                         landmarks_list=self.lr_model_data["landmarks_data"],
                         gt_transcript=self.lr_model_data["transcript_data"],
                     )
-                except ValueError as e:
-                    logging.error(
-                        f"Error calculating LRWER for {task.seq_name} qp {task.q_points[idx].qp_desc}: {e}",
-                        exc_info=True,
-                    )
+                except ValueError:
+                    logging.exception(f"Error calculating LRWER for {task.seq_name} qp {task.q_points[idx].qp_desc}")
 
             # Restore original deterministic algorithm setting
             torch.use_deterministic_algorithms(original_torch_deterministic_flag)
@@ -543,7 +541,7 @@ class EncoderTestTaskProcessor:
             original_torch_deterministic_flag = torch.are_deterministic_algorithms_enabled()
             torch.use_deterministic_algorithms(False)
 
-            deqa_scores: list[Optional[list[float]]] = [None] * len(self.task.q_points)
+            deqa_scores: list[list[float] | None] = [None] * len(self.task.q_points)
             assert self._deqa_model is not None
             assert self._deqa_max_num_frames is not None
             for idx in range(len(self.task.q_points)):
@@ -558,10 +556,9 @@ class EncoderTestTaskProcessor:
                     rgb_rec_frames_pil = [Image.fromarray(frame) for frame in deqa_selected_frames]
                     deqa_scores_per_frame = [float(ds.cpu()) for ds in self._deqa_model(rgb_rec_frames_pil)]
                     deqa_scores[idx] = deqa_scores_per_frame
-                except Exception as e:
-                    logging.error(
-                        f"Error calculating DeQA-Score for {task.seq_name} qp {task.q_points[idx].qp_desc}: {e}",
-                        exc_info=True,
+                except Exception:
+                    logging.exception(
+                        f"Error calculating DeQA-Score for {task.seq_name} qp {task.q_points[idx].qp_desc}"
                     )
                     deqa_scores[idx] = None
             # Restore original deterministic algorithm setting
@@ -620,7 +617,7 @@ class EncoderTestTaskProcessor:
                 try:
                     writer.close()
                 except Exception:
-                    logging.error("Exception while closing decoded clip writer", exc_info=True)
+                    logging.exception("Exception while closing decoded clip writer")
         self.rec_frame_writer_list = None
 
     def _record_simple_vqa_error(self, index: int, error: Exception):
@@ -629,7 +626,7 @@ class EncoderTestTaskProcessor:
             self.task.seq_name,
             self.task.q_points[index].qp_desc,
             error,
-            exc_info=True,
+            exc_info=error,
         )
         self._simple_vqa_errors[index] = str(error)
         self._simple_vqa_streams[index] = None
@@ -676,7 +673,7 @@ class EncoderTestTaskProcessor:
             image = read_one_frame()
             assert image is not None
             x, image_tensors, padding = prepare_frame(
-                image,  # type: ignore[reportArgumentType]
+                image,
                 is_yuv420=params.is_yuv420,
                 precision="fp32",
                 device=self.device,
@@ -686,23 +683,23 @@ class EncoderTestTaskProcessor:
             intra_idx = frame_idx % task.intra_period if task.intra_period > 0 else frame_idx
             if intra_idx == 0:
                 # Gray I-frame: both chains restart from the same reference.
-                dpb_gpu = dpb_ane = dict(
-                    ref_frame=torch.ones_like(x) * 0.5,
-                    ref_feature=None,
-                    ref_mv_feature=None,
-                    ref_y=None,
-                    ref_mv_y=None,
-                    ltr_feature=None,
-                )
+                dpb_gpu = dpb_ane = {
+                    "ref_frame": torch.ones_like(x) * 0.5,
+                    "ref_feature": None,
+                    "ref_mv_feature": None,
+                    "ref_y": None,
+                    "ref_mv_y": None,
+                    "ltr_feature": None,
+                }
             fa_idx = index_map[(intra_idx + 1) % len(index_map)] if index_map is not None else intra_idx + 1
 
             # Encode + GPU decode in AMP fp16, then ANE-decode the same latent with the ANE DPB.
             with torch.autocast(device_type=device_type, dtype=torch.float16):
-                c_result = p_model.compress_core(x, dpb_gpu, q_index, fa_idx)  # type: ignore[union-attr]
+                c_result = p_model.compress_core(x, dpb_gpu, q_index, fa_idx)  # ty: ignore[call-non-callable]
             dpb_gpu = c_result["dpb"]
 
             with ane_simulation(exact_conv=params.ane_exact_conv):
-                x_hat_ane, _, dpb_ane, _, _ = p_model.decode_core(  # type: ignore[union-attr]
+                x_hat_ane, _, dpb_ane, _, _ = p_model.decode_core(  # ty: ignore[call-non-callable]
                     dpb_ane, q_index, fa_idx, z_hat=c_result["z_hat"], y_res_q=c_result["y_raw"]
                 )
 
@@ -787,7 +784,7 @@ class EncoderTestTaskProcessor:
 
         assert source_frame is not None
         x, source_image, padding = prepare_frame(
-            source_frame,  # type: ignore[reportArgumentType]
+            source_frame,
             is_yuv420=params.is_yuv420,
             precision="fp16" if params.float16 else "fp32",
             device=self.device,
@@ -800,7 +797,7 @@ class EncoderTestTaskProcessor:
         metric_image = source_image
         if target_frame is not None:
             _, metric_image, target_padding = prepare_frame(
-                target_frame,  # type: ignore[reportArgumentType]
+                target_frame,
                 is_yuv420=params.is_yuv420,
                 precision="fp16" if params.float16 else "fp32",
                 device=self.device,
@@ -871,7 +868,7 @@ class EncoderTestTaskProcessor:
 
         dpb, qp_shift, prev_feature = use_ltr_features(dpb, params, intra_idx, qp_shift)
 
-        q_index_override: Optional[int | list[int]] = None
+        q_index_override: int | list[int] | None = None
         if self._rate_controllers is not None:
             q_index_override = self._compute_rate_controller_q_index(frame_idx, intra_idx)
 
@@ -964,7 +961,7 @@ class EncoderTestTaskProcessor:
             frame_type = RateControllerFrameType.P_FRAME
 
         # Solve for q-index for each bitrate point
-        q_index_list: list[int] = list()
+        q_index_list: list[int] = []
         for task_qp, rate_controller in zip(self.task.q_points, self._rate_controllers):
             q_index = rate_controller.solve_q_index(presentation_time, frame_type)
             if q_index is None:
@@ -999,8 +996,8 @@ class EncoderTestTaskProcessor:
         frame_idx: int,
         intra_idx: int,
         iteration_idx: int,
-        q_index_override: Optional[int | list[int]] = None,
-        qp_shift: Optional[int] = None,
+        q_index_override: int | list[int] | None = None,
+        qp_shift: int | None = None,
     ):
         params = self.task.params
         is_i_frame_model = params.use_i_frame_model and intra_idx == 0
@@ -1043,7 +1040,7 @@ class EncoderTestTaskProcessor:
                 )
             )
 
-            result = model.compress(x, **c_args, calc_bits_estimates=params.calc_bits_estimates)  # type: ignore[union-attr]
+            result = model.compress(x, **c_args, calc_bits_estimates=params.calc_bits_estimates)  # ty: ignore[call-non-callable]
 
             bit_stream_list = result.pop("bit_stream")
 
@@ -1088,7 +1085,7 @@ class EncoderTestTaskProcessor:
                         q_index_override=q_index_override,
                     )
                 )
-                d_result = model.decompress(  # type: ignore[union-attr]
+                d_result = model.decompress(  # ty: ignore[call-non-callable]
                     bit_stream_list if can_batch_decode else bit_stream_list[0],
                     height=x.shape[-2],
                     width=x.shape[-1],
@@ -1104,10 +1101,10 @@ class EncoderTestTaskProcessor:
 
         return result
 
-    def _make_i_frame_args(self, q_index_override: Optional[int | list[int]] = None):
-        return dict(
-            q_index=self._make_qindex_arg("i_frame_q_index", q_index_override=q_index_override),
-        )
+    def _make_i_frame_args(self, q_index_override: int | list[int] | None = None):
+        return {
+            "q_index": self._make_qindex_arg("i_frame_q_index", q_index_override=q_index_override),
+        }
 
     def _make_p_frame_args(
         self,
@@ -1115,8 +1112,8 @@ class EncoderTestTaskProcessor:
         dpb,
         intra_idx: int,
         iteration_idx: int,
-        q_index_override: Optional[int | list[int]] = None,
-        qp_shift: Optional[int] = None,
+        q_index_override: int | list[int] | None = None,
+        qp_shift: int | None = None,
     ):
         params = self.task.params
         if not params.use_i_frame_model:
@@ -1134,7 +1131,7 @@ class EncoderTestTaskProcessor:
                     if dpb.get(name) is not None:
                         dpb[name] = None
 
-        index_map = getattr(model, "frame_index_map")
+        index_map = model.frame_index_map
         if index_map is not None:
             fa_idx = index_map[intra_idx % len(index_map)]
         else:
@@ -1152,17 +1149,17 @@ class EncoderTestTaskProcessor:
             else:
                 q_index = max(0, min(q_index + qp_shift, max_qp_index))
 
-        args = dict(
-            dpb=dpb,
-            q_index=q_index,
-            fa_idx=fa_idx,
-        )
+        args = {
+            "dpb": dpb,
+            "q_index": q_index,
+            "fa_idx": fa_idx,
+        }
         if hasattr(model, "expert_schedule"):
             args["curr_poc"] = intra_idx - 1
 
         return args
 
-    def _make_qindex_arg(self, name: str, q_index_override: Optional[int | list[int]] = None):
+    def _make_qindex_arg(self, name: str, q_index_override: int | list[int] | None = None):
         q_points = self.task.q_points
         if len(q_points) == 1:
             if q_index_override is not None:
@@ -1174,20 +1171,20 @@ class EncoderTestTaskProcessor:
                 assert isinstance(q_index_override, list)
                 qp = q_index_override
             else:
-                qp = list(getattr(q, name) for q in q_points)
+                qp = [getattr(q, name) for q in q_points]
             assert len(qp) == len(q_points)
             return torch.tensor(qp, dtype=torch.long, device=self.device)
 
     @staticmethod
     def _make_dpb(x_hat):
-        return dict(
-            ref_frame=x_hat,
-            ref_feature=None,
-            ref_mv_feature=None,
-            ref_y=None,
-            ref_mv_y=None,
-            ltr_feature=None,
-        )
+        return {
+            "ref_frame": x_hat,
+            "ref_feature": None,
+            "ref_mv_feature": None,
+            "ref_y": None,
+            "ref_mv_y": None,
+            "ltr_feature": None,
+        }
 
     def _process_rec(self, x_hat, image, mask=None):
         params = self.task.params
@@ -1238,7 +1235,7 @@ class EncoderTestTaskProcessor:
                 frame_to_store = (frame_to_store * 255).astype(np.uint8)
                 self.rgb_frame_buffer[batch_idx].append(frame_to_store)
 
-        extra_stats = dict()
+        extra_stats = {}
 
         if params.calc_psnr:
             psnr_y = self._calc_psnr(y, y_rec)
@@ -1372,7 +1369,7 @@ class EncoderTestTaskProcessor:
 
         stat_list = self.frame_stats.get(name)
         if stat_list is None:
-            self.frame_stats[name] = stat_list = list()
+            self.frame_stats[name] = stat_list = []
 
         stat_list.append(value)
 
@@ -1419,11 +1416,11 @@ class EncoderTestTaskProcessor:
 
     def _generate_result(self, test_time, index):
         task = self.task
-        result: dict[str, Any] = dict(
-            ds_name=task.dataset_name,
-            video_path=task.seq_name,
-            frame_pixel_num=self.frame_pixel_num,
-        )
+        result: dict[str, Any] = {
+            "ds_name": task.dataset_name,
+            "video_path": task.seq_name,
+            "frame_pixel_num": self.frame_pixel_num,
+        }
         for type_index, type_name in enumerate(("i_frame", "p_frame")):
             n_frames = sum(1 for t in self.frame_types if t == type_index)
             result[f"{type_name}_num"] = n_frames
@@ -1451,7 +1448,7 @@ class EncoderTestTaskProcessor:
         if task.params.verbose_json:
             result["frame_type"] = self.frame_types.copy()
             for name, stat_list in self.frame_stats.items():
-                result[f"frame_{name}"] = list(float(x[index]) for x in stat_list)
+                result[f"frame_{name}"] = [float(x[index]) for x in stat_list]
 
         task_qp = task.q_points[index]
         result["i_frame_q_index"] = task_qp.i_frame_q_index
@@ -1464,7 +1461,7 @@ class EncoderTestTaskProcessor:
 
 
 class EncoderTestDataset(torch.utils.data.IterableDataset):
-    def __init__(self, task_list: List[EncoderTestTask]):
+    def __init__(self, task_list: list[EncoderTestTask]):
         self.task_list = task_list
 
     def __iter__(self):
@@ -1501,9 +1498,9 @@ class EncoderTester:
         rank: int,
         params: EncoderTestParams,
         *,
-        i_frame_model: Union[nn.Module, Callable[[EncoderTestTask], nn.Module], None],
-        p_frame_model: Union[nn.Module, Callable[[EncoderTestTask], nn.Module], None],
-        auxiliary_models: Optional[AuxiliaryModels] = None,
+        i_frame_model: nn.Module | Callable[[EncoderTestTask], nn.Module] | None,
+        p_frame_model: nn.Module | Callable[[EncoderTestTask], nn.Module] | None,
+        auxiliary_models: AuxiliaryModels | None = None,
     ):
         self.rank = rank
         params = copy.copy(params)
@@ -1564,7 +1561,7 @@ class EncoderTester:
         if len(i_list) != len(p_list):
             raise ValueError("Can not use different number of i-frame and p-frame q-indices")
 
-        params.i_frame_q_index_list, params.p_frame_q_index_list = i_list, p_list  # type: ignore[assignment]
+        params.i_frame_q_index_list, params.p_frame_q_index_list = i_list, p_list  # ty: ignore[invalid-assignment]
 
     def _get_rate_list(self, rate_list, seq_name):
 
@@ -1632,9 +1629,9 @@ class EncoderTester:
         self,
         testset_desc_filename: str,
         *,
-        testset_root: Optional[str] = None,
-        target_desc_filename: Optional[str] = None,
-        target_root: Optional[str] = None,
+        testset_root: str | None = None,
+        target_desc_filename: str | None = None,
+        target_root: str | None = None,
     ):
         testset_desc = self._load_testset_description(testset_desc_filename)
 
@@ -1653,14 +1650,14 @@ class EncoderTester:
 
         if params.bitrate_list is not None:
             if isinstance(params.bitrate_list, dict):
-                key = list(params.bitrate_list.keys())[0]
+                key = next(iter(params.bitrate_list.keys()))
                 n_qpoints = len(params.bitrate_list[key])
             else:
                 n_qpoints = len(params.bitrate_list)
         else:
             assert params.i_frame_q_index_list is not None
             if isinstance(params.i_frame_q_index_list, dict):
-                key = list(params.i_frame_q_index_list.keys())[0]
+                key = next(iter(params.i_frame_q_index_list.keys()))
                 n_qpoints = len(params.i_frame_q_index_list[key])
             else:
                 n_qpoints = len(params.i_frame_q_index_list)
@@ -1715,7 +1712,7 @@ class EncoderTester:
                     assert i_frame_q_index_list is not None and p_frame_q_index_list is not None
 
                 for rate_base_idx in range(0, n_qpoints, max_batch_size):
-                    qp_list = list()
+                    qp_list = []
                     rate_end_idx = min(n_qpoints, rate_base_idx + max_batch_size)
                     for rate_idx in range(rate_base_idx, rate_end_idx):
                         if bitrate_list is not None:
@@ -1750,7 +1747,7 @@ class EncoderTester:
 
                         qp_list.append(task_qp)
 
-                    lr_model_data_filepath: dict[str, Optional[str]] = {
+                    lr_model_data_filepath: dict[str, str | None] = {
                         "transcript": None,
                         "landmarks": None,
                     }
@@ -1770,7 +1767,7 @@ class EncoderTester:
                         lr_model_data_filepath["transcript"] = transcript_filepath
                         lr_model_data_filepath["landmarks"] = landmarks_filepath
 
-                    mask_path_root: Optional[str] = None
+                    mask_path_root: str | None = None
                     if params.calc_psnr_roi and params.precomputed_masks_path:
                         mask_path_root = os.path.normpath(
                             os.path.join(
@@ -1805,7 +1802,7 @@ class EncoderTester:
 
                     yield task
 
-    def _process_task_list(self, task_list: List[EncoderTestTask]):
+    def _process_task_list(self, task_list: list[EncoderTestTask]):
         dataset = EncoderTestDataset(task_list)
         data_loader = torch.utils.data.DataLoader(
             dataset,
@@ -1833,7 +1830,7 @@ class EncoderTester:
             yield task.dataset_name, task.seq_name, {qp.qp_desc: r for qp, r in zip(task.q_points, result)}
 
     @staticmethod
-    def _get_task_model(task: EncoderTestTask, model: Union[nn.Module, Callable[[EncoderTestTask], nn.Module], None]):
+    def _get_task_model(task: EncoderTestTask, model: nn.Module | Callable[[EncoderTestTask], nn.Module] | None):
         if model is not None and not isinstance(model, nn.Module):
             model = model(task)
         return model
@@ -1847,18 +1844,18 @@ class EncoderTester:
 
     @staticmethod
     def _build_results(result_list):
-        output = dict()
+        output = {}
 
         seen_qp = {}
         for dataset_name, seq_name, qp_map in result_list:
             for qp, result in qp_map.items():
                 dataset_node = output.get(dataset_name)
                 if dataset_node is None:
-                    output[dataset_name] = dataset_node = dict()
+                    output[dataset_name] = dataset_node = {}
 
                 seq_node = dataset_node.get(seq_name)
                 if seq_node is None:
-                    dataset_node[seq_name] = seq_node = dict()
+                    dataset_node[seq_name] = seq_node = {}
 
                 # Deduplicate q-point entries to maintain number of points
                 if qp in seq_node:
@@ -1877,9 +1874,9 @@ class EncoderTester:
         testset_name,
         testset_desc_filename: str,
         *,
-        testset_root: Optional[str] = None,
-        target_desc_filename: Optional[str] = None,
-        target_root: Optional[str] = None,
+        testset_root: str | None = None,
+        target_desc_filename: str | None = None,
+        target_root: str | None = None,
     ):
         if target_desc_filename is not None and self.params.calc_ane_divergence:
             raise ValueError("Benchmark targets cannot be combined with calc_ane_divergence")
@@ -1895,7 +1892,7 @@ class EncoderTester:
             raise ValueError(f"No test sequences found in testset {testset_name}")
 
         n_frames = sum(task.n_frames for task in task_list)
-        n_videos = len(set((task.dataset_name, task.seq_name) for task in task_list))
+        n_videos = len({(task.dataset_name, task.seq_name) for task in task_list})
         n_qpoints = self.n_qpoints
 
         def task_weight(task):
@@ -1929,13 +1926,13 @@ def run_encoder_test(
     testset_name: str,
     testset_desc_filename: str,
     rank=-1,
-    i_frame_model: Union[nn.Module, Callable[[EncoderTestTask], nn.Module], None],
-    p_frame_model: Union[nn.Module, Callable[[EncoderTestTask], nn.Module], None],
-    auxiliary_models: Optional[AuxiliaryModels] = None,
-    testset_root: Optional[str] = None,
-    target_desc_filename: Optional[str] = None,
-    target_root: Optional[str] = None,
-    output_path: Optional[str] = None,
+    i_frame_model: nn.Module | Callable[[EncoderTestTask], nn.Module] | None,
+    p_frame_model: nn.Module | Callable[[EncoderTestTask], nn.Module] | None,
+    auxiliary_models: AuxiliaryModels | None = None,
+    testset_root: str | None = None,
+    target_desc_filename: str | None = None,
+    target_root: str | None = None,
+    output_path: str | None = None,
 ):
     tester = EncoderTester(
         rank, params, i_frame_model=i_frame_model, p_frame_model=p_frame_model, auxiliary_models=auxiliary_models

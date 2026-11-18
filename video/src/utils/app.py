@@ -18,9 +18,10 @@ import shutil
 import sys
 import tempfile
 import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import cached_property
 from numbers import Number, Real
-from typing import Dict, Any, Set, Optional, Sequence, List, Union, Callable, Mapping, Iterable
+from typing import Any
 
 import numpy as np
 import torch
@@ -29,31 +30,31 @@ import torch.utils.data
 import yaml
 from torch.nn.parallel import DistributedDataParallel
 
+from .background_writer import BackgroundWriter
 from .common import (
+    AuxiliaryModels,
+    GradNormTracker,
     apply_type_annotations_to_config,
-    configure_logging,
-    multiprocessing_init,
-    set_config_value_by_path,
-    sync_random_seed,
-    create_metrics_writer,
-    get_optimizer,
-    ddp_sync_optimizer,
-    ddp_sync_model,
-    write_epoch_marker,
-    read_epoch_marker,
     compare_test_with_anchor,
+    configure_logging,
+    create_metrics_writer,
+    ddp_sync_model,
+    ddp_sync_optimizer,
+    get_optimizer,
+    get_training_lambdas,
+    multiprocessing_init,
+    read_epoch_marker,
     remove_nan_grad,
     remove_nan_grad_and_clamp,
-    get_training_lambdas,
-    GradNormTracker,
-    AuxiliaryModels,
+    set_config_value_by_path,
+    sync_random_seed,
+    write_epoch_marker,
 )
-from .background_writer import BackgroundWriter
 from .encoder_tester import EncoderTestParams, run_encoder_test
 from .mount_point import MountPointResolver
 from .profiling import summarize_model_layers
 from .qp_matcher import match_q_index_lists
-from .stream_helper import get_state_dict, PaddingMode, PaddingAlignment
+from .stream_helper import PaddingAlignment, PaddingMode, get_state_dict
 
 __all__ = ["BaseApp", "BaseTrainApp", "BaseTrainVideoApp"]
 
@@ -150,7 +151,7 @@ class BaseApp(abc.ABC):
                 logging.exception(f"Unexpected exception in {type(self)}::close()")
                 rc = -1
 
-        quit(rc)
+        sys.exit(rc)
 
     # noinspection PyMethodMayBeStatic
     def configure_init_logging(self):
@@ -173,7 +174,7 @@ class BaseApp(abc.ABC):
             log_dir = self.resolve_path(log_dir, default_source=None)
             os.makedirs(log_dir, exist_ok=True)
 
-            timestamp = datetime.datetime.now(datetime.timezone.utc)
+            timestamp = datetime.datetime.now(datetime.UTC)
             log_file_name = os.path.join(log_dir, f"l-{max(0, local_rank)}-{timestamp:%Y_%m_%d-%H_%M_%S}.log")
 
             handler = logging.FileHandler(log_file_name)
@@ -184,7 +185,7 @@ class BaseApp(abc.ABC):
         parser = argparse.ArgumentParser()
         self.configure_cmdline_only_arguments(parser)
         # noinspection PyProtectedMember
-        self._cmdline_only_arguments = set(x.dest for x in parser._option_string_actions.values())
+        self._cmdline_only_arguments = {x.dest for x in parser._option_string_actions.values()}
         self.configure_cmdline_arguments(parser)
 
         cmd_args, _ = parser.parse_known_args()
@@ -269,7 +270,7 @@ class BaseApp(abc.ABC):
                     overrides_config = yaml.load(f, Loader=yaml.FullLoader)
 
             self._apply_overrides_config(config, overrides_config)
-        del cmd_args.overrides_file  # type: ignore[attr-defined]
+        del cmd_args.overrides_file
 
         overrides = cmd_args.overrides
         if overrides:
@@ -277,7 +278,7 @@ class BaseApp(abc.ABC):
                 overrides_config = yaml.load(f, Loader=yaml.FullLoader)
 
             self._apply_overrides_config(config, overrides_config)
-        del cmd_args.overrides  # type: ignore[attr-defined]
+        del cmd_args.overrides
 
         add_to_system_path = cmd_args.add_to_system_path
         if add_to_system_path is not None and len(add_to_system_path) > 0:
@@ -301,8 +302,8 @@ class BaseApp(abc.ABC):
         self,
         parser: argparse.ArgumentParser,
         prefix: str,
-        config: Dict[str, Any],
-        explicit_args: Optional[Set[str]] = None,
+        config: dict[str, Any],
+        explicit_args: set[str] | None = None,
     ):
         """
         Add arguments for configuration settings found in config
@@ -421,7 +422,7 @@ class BaseApp(abc.ABC):
 
         from torch._logging._internal import log_registry
 
-        modules: Dict[str, Union[int, bool]] = {}
+        modules: dict[str, int | bool] = {}
         for name in (n.strip() for n in settings.split(",")):
             if not name:
                 continue
@@ -441,7 +442,7 @@ class BaseApp(abc.ABC):
                 raise ValueError(f"Unknown torch.logs entry {name!r}")
 
         logging.info(f"Setting torch._logging.set_logs from torch.logs={settings!r}")
-        torch._logging.set_logs(modules=modules or None)  # pyright: ignore[reportPrivateImportUsage]
+        torch._logging.set_logs(modules=modules or None)
 
     def distributed_init(self, local_rank):
         distributed_backend = self.config["distributed_backend"]
@@ -516,7 +517,7 @@ class BaseApp(abc.ABC):
         if self.rank >= 0:
             torch.distributed.destroy_process_group()
 
-    def resolve_path(self, path, *, default_source: Optional[str] = "data_mount", expand_cwd=False) -> str:
+    def resolve_path(self, path, *, default_source: str | None = "data_mount", expand_cwd=False) -> str:
         if not path:
             # empty strings and None are unchanged
             return path
@@ -581,8 +582,8 @@ class BaseApp(abc.ABC):
         if world_size <= 1:
             return x
 
-        ops = list()
-        result = list()
+        ops = []
+        result = []
         for t in x:
             s = t.shape[0] * world_size, *t.shape[1:]
             r = torch.empty(s, dtype=t.dtype, device=t.device)
@@ -604,11 +605,11 @@ class SchedulePlayer:
     def __init__(
         self,
         *,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         config_path: str,
-        schedule: List[Dict[str, Any]],
+        schedule: list[dict[str, Any]],
         schedule_path: str,
-        immutable_path_set: Set[str],
+        immutable_path_set: set[str],
     ):
         self.config = config
         self.config_path = config_path
@@ -618,10 +619,10 @@ class SchedulePlayer:
         self.frozen_path_set = set()
         self.epoch = 0
         self.cursor = 0
-        self.stash = dict()
+        self.stash = {}
 
-    def freeze(self, frozen_config: Dict[str, Any], frozen_config_path: str):
-        change_set = dict()
+    def freeze(self, frozen_config: dict[str, Any], frozen_config_path: str):
+        change_set = {}
         self._apply_object(
             self.config,
             frozen_config,
@@ -632,11 +633,11 @@ class SchedulePlayer:
             stash=None,
         )
 
-        self.frozen_path_set |= set(n for n, is_leaf in change_set.items() if is_leaf)
+        self.frozen_path_set |= {n for n, is_leaf in change_set.items() if is_leaf}
 
-    def apply(self, *, epoch: Optional[int], dry_run: bool = True) -> Dict[str, bool]:
+    def apply(self, *, epoch: int | None, dry_run: bool = True) -> dict[str, bool]:
         last_epoch = self.epoch
-        change_set = dict()
+        change_set = {}
 
         if epoch is not None and epoch < last_epoch:
             return change_set
@@ -690,14 +691,14 @@ class SchedulePlayer:
 
     def _apply_object(
         self,
-        config: Dict[str, Any],
-        step: Dict[str, Any],
+        config: dict[str, Any],
+        step: dict[str, Any],
         *,
         config_path: str,
         step_path: str,
-        change_set: Dict[str, bool],
-        dry_run: Optional[bool],
-        stash: Optional[bool],
+        change_set: dict[str, bool],
+        dry_run: bool | None,
+        stash: bool | None,
     ):
         for n, v in step.items():
             self._apply_item(
@@ -719,9 +720,9 @@ class SchedulePlayer:
         *,
         config_path: str,
         step_path: str,
-        change_set: Dict[str, bool],
-        dry_run: Optional[bool],
-        stash: Optional[bool],
+        change_set: dict[str, bool],
+        dry_run: bool | None,
+        stash: bool | None,
     ):
 
         if stash is not None and key_path.startswith("^"):
@@ -791,7 +792,7 @@ class SchedulePlayer:
 
         self.stash[key_path] = value
 
-    def _add_to_change_set(self, change_set: Dict[str, bool], key_path: str, is_leaf=True):
+    def _add_to_change_set(self, change_set: dict[str, bool], key_path: str, is_leaf=True):
         value = change_set.get(key_path)
         if value is not None:
             assert value == is_leaf
@@ -799,13 +800,13 @@ class SchedulePlayer:
 
         change_set[key_path] = is_leaf
 
-        parent, sep, name = key_path.rpartition(".")
+        parent, sep, _name = key_path.rpartition(".")
         if not sep:
             return
 
         self._add_to_change_set(change_set, parent, False)
 
-    def _apply_stash(self, epoch, *, change_set: Dict[str, bool], dry_run: bool):
+    def _apply_stash(self, epoch, *, change_set: dict[str, bool], dry_run: bool):
         assert self.epoch <= epoch
         if epoch == self.epoch:
             return
@@ -832,23 +833,17 @@ class BatchSkipException(ValueError):
     Common ancestor for batch skipping exception
     """
 
-    pass
-
 
 class NonFiniteGradError(BatchSkipException):
     """
     Exception for non-finite gradients
     """
 
-    pass
-
 
 class TooLargeGradError(BatchSkipException):
     """
     Exception for too large gradients
     """
-
-    pass
 
 
 def keep_optimizer_implementation(optimizer: torch.optim.Optimizer):
@@ -867,9 +862,9 @@ def keep_optimizer_implementation(optimizer: torch.optim.Optimizer):
 
 
 class BaseTrainApp(BaseApp):
-    model: Optional[torch.nn.Module]
-    optimizer: Optional[torch.optim.Optimizer]
-    grad_norm_tracker: Optional[GradNormTracker]
+    model: torch.nn.Module | None
+    optimizer: torch.optim.Optimizer | None
+    grad_norm_tracker: GradNormTracker | None
 
     def __init__(self):
         super().__init__()
@@ -881,19 +876,19 @@ class BaseTrainApp(BaseApp):
         self._train_dataloader = None
         self._device = None
         self._epoch_steps = 0
-        self._training_schedule = list()
+        self._training_schedule = []
         self._benchmarked_epoch = set()
 
         # metrics to log to AzureML
-        self._step_metrics = dict()
+        self._step_metrics = {}
 
         # info to print to log
         self._step_info_timestamp = 0.0
 
         self._auxiliary_models = None
 
-        self._background_writer: Optional[BackgroundWriter] = None
-        self._local_output_dir: Optional[str] = None
+        self._background_writer: BackgroundWriter | None = None
+        self._local_output_dir: str | None = None
 
     @property
     def async_save_dir_writes(self) -> bool:
@@ -972,7 +967,7 @@ class BaseTrainApp(BaseApp):
 
         return checkpoint_path
 
-    def load_model(self, model_state, pretrained: Optional[bool] = None):
+    def load_model(self, model_state, pretrained: bool | None = None):
         model = self.create_model()
         summarize_model_layers(model)
 
@@ -1003,7 +998,7 @@ class BaseTrainApp(BaseApp):
         return DistributedDataParallel(model, find_unused_parameters=False)
 
     @staticmethod
-    def get_unwrapped_model(model: Optional[torch.nn.Module]):
+    def get_unwrapped_model(model: torch.nn.Module | None):
         if isinstance(model, DistributedDataParallel):
             model = model.module
         return model
@@ -1113,7 +1108,7 @@ class BaseTrainApp(BaseApp):
             player = SchedulePlayer(
                 config=config,
                 config_path=config_path,
-                schedule=schedule,  # type: ignore[arg-type]
+                schedule=schedule,
                 schedule_path=schedule_path,
                 immutable_path_set={schedule_path, frozen_path, *self.get_immutable_config_keys()},
             )
@@ -1160,7 +1155,7 @@ class BaseTrainApp(BaseApp):
 
             sampler = DistributedSampler(dataset, num_replicas=self.world_size, rank=self.rank, drop_last=True)
 
-        extra_args = dict()
+        extra_args: dict[str, Any] = {}
 
         n_workers = config["n_workers"]
         if n_workers > 0:
@@ -1191,7 +1186,7 @@ class BaseTrainApp(BaseApp):
         return True
 
     @staticmethod
-    def is_train_dataloader_changed(change_set: Dict[str, bool]):
+    def is_train_dataloader_changed(change_set: dict[str, bool]):
         return "train.dataset" in change_set
 
     def discard_train_dataloader(self):
@@ -1199,10 +1194,10 @@ class BaseTrainApp(BaseApp):
 
     def get_train_state(self, epoch):
         assert self.optimizer is not None
-        train_state = dict(
-            epoch=epoch,
-            optimizer=self.optimizer.state_dict(),
-        )
+        train_state = {
+            "epoch": epoch,
+            "optimizer": self.optimizer.state_dict(),
+        }
         if self.grad_norm_tracker is not None:
             train_state["grad_norm_tracker"] = self.grad_norm_tracker.state_dict()
 
@@ -1213,10 +1208,7 @@ class BaseTrainApp(BaseApp):
             return True
 
         ckpt_per_epoch = self.get_config_by_path("train.ckpt_per_epoch", default=1, expected_type=int)
-        if ckpt_per_epoch > 0 and (epoch + 1) % ckpt_per_epoch == 0:
-            return True
-
-        return False
+        return bool(ckpt_per_epoch > 0 and (epoch + 1) % ckpt_per_epoch == 0)
 
     def checkpoint(self, epoch, *, is_first_checkpoint: bool):
         assert self.model is not None
@@ -1290,10 +1282,10 @@ class BaseTrainApp(BaseApp):
 
         if self.get_config_by_path("train.save_gradient_history", default=False, expected_type=bool):
             torch.save(
-                dict(
-                    parameter_map=grad_norm_tracker.parameter_map,
-                    history=grad_norm_tracker.history,
-                ),
+                {
+                    "parameter_map": grad_norm_tracker.parameter_map,
+                    "history": grad_norm_tracker.history,
+                },
                 os.path.join(self.save_dir, f"gradient_history-{epoch}.ckpt"),
             )
 
@@ -1304,7 +1296,7 @@ class BaseTrainApp(BaseApp):
         raise NotImplementedError()
 
     @staticmethod
-    def disable_grad_for_modules(model: torch.nn.Module, modules_to_train: Optional[Set[str]] = None):
+    def disable_grad_for_modules(model: torch.nn.Module, modules_to_train: set[str] | None = None):
         assert not isinstance(model, DistributedDataParallel), "model must be unwrapped before disabling grad"
 
         if modules_to_train is None:
@@ -1354,7 +1346,7 @@ class BaseTrainApp(BaseApp):
         assert self.optimizer is not None
         train_dataloader = self.train_dataloader
         if hasattr(train_dataloader.sampler, "set_epoch"):
-            train_dataloader.sampler.set_epoch(epoch)  # type: ignore[union-attr]
+            train_dataloader.sampler.set_epoch(epoch)
 
         epoch_steps = len(train_dataloader)
         limit = self.get_epoch_steps(epoch)
@@ -1508,7 +1500,7 @@ class BaseTrainApp(BaseApp):
 
         value_list = self._step_metrics.get(name)
         if value_list is None:
-            self._step_metrics[name] = value_list = list()
+            self._step_metrics[name] = value_list = []
 
         value_list.append(value)
 
@@ -1558,7 +1550,7 @@ class BaseTrainApp(BaseApp):
 
     def get_step_info(self):
         lr = self.get_config_by_path("train.learning_rate")
-        return dict(lr=f"{lr:.6f}")
+        return {"lr": f"{lr:.6f}"}
 
     def reset_step_info(self):
         pass
@@ -1613,7 +1605,7 @@ class BaseTrainApp(BaseApp):
             self.close_background_writer()
 
     def _apply_training_schedule(self, epoch):
-        change_set = dict()
+        change_set = {}
         for schedule in self._training_schedule:
             change_set.update(schedule.apply(epoch=epoch, dry_run=False))
 
@@ -1625,7 +1617,7 @@ class BaseTrainApp(BaseApp):
 
         self.on_config_changed(change_set)
 
-    def on_config_changed(self, change_set: Dict[str, bool]):
+    def on_config_changed(self, change_set: dict[str, bool]):
         if "torch.logs" in change_set:
             self.set_torch_logs()
         if self.is_train_dataloader_changed(change_set):
@@ -1694,7 +1686,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         self._step_info_names = None
         self._step_info_values = None
         self._step_info_steps = None
-        self._step_info_dict = None
+        self._step_info_dict: dict[str, Any] | None = None
 
         self.lambda_min = None
         self.lambda_max = None
@@ -1710,7 +1702,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
 
         benchmark_test = self.get_config_by_path("benchmark_test")
         if isinstance(benchmark_test, dict):
-            for testset_name in benchmark_test.keys():
+            for testset_name in benchmark_test:
                 key_list.append(f"benchmark_test.{testset_name}")
 
         return key_list
@@ -1788,7 +1780,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         )
 
     def add_step_info(
-        self, keys: Dict[str, int], values: torch.Tensor, *, qp_num: int = 1, q_index: Optional[torch.Tensor] = None
+        self, keys: dict[str, int], values: torch.Tensor, *, qp_num: int = 1, q_index: torch.Tensor | None = None
     ):
         if self.rank > 0:
             return
@@ -1849,8 +1841,8 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         self,
         epoch,
         *,
-        i_frame_model: Union[None, torch.nn.Module, Callable[[], torch.nn.Module]],
-        p_frame_model: Union[None, torch.nn.Module, Callable[[], torch.nn.Module]],
+        i_frame_model: None | torch.nn.Module | Callable[[], torch.nn.Module],
+        p_frame_model: None | torch.nn.Module | Callable[[], torch.nn.Module],
         i_frame_qp_map=None,
     ):
         benchmark_test = self.get_config_by_path("benchmark_test")
@@ -1877,10 +1869,10 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         self,
         epoch,
         testset_name,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         *,
-        i_frame_model: Union[None, torch.nn.Module, Callable[[], torch.nn.Module]],
-        p_frame_model: Union[None, torch.nn.Module, Callable[[], torch.nn.Module]],
+        i_frame_model: None | torch.nn.Module | Callable[[], torch.nn.Module],
+        p_frame_model: None | torch.nn.Module | Callable[[], torch.nn.Module],
         i_frame_qp_map=None,
     ):
 
@@ -1992,12 +1984,11 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         q_index_matching = config.get("q_index_matching")
         if q_index_matching is not None:
             match = self._match_q_index_lists(q_index_matching)
-            if match is not None:
-                if i_frame_q_index_list is not None or p_frame_q_index_list is not None:
-                    raise ValueError(
-                        f"{testset_name}: q_index_matching and i/p_frame_qindex_list"
-                        " configuration items are mutually exclusive"
-                    )
+            if match is not None and (i_frame_q_index_list is not None or p_frame_q_index_list is not None):
+                raise ValueError(
+                    f"{testset_name}: q_index_matching and i/p_frame_qindex_list"
+                    " configuration items are mutually exclusive"
+                )
 
             assert match is not None
             i_frame_q_index_list, p_frame_q_index_list = match
@@ -2075,7 +2066,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         *,
         config: Mapping[str, Any],
         params: EncoderTestParams,
-        epoch: Optional[int],
+        epoch: int | None,
         i_frame_model,
         p_frame_model,
     ):
@@ -2169,7 +2160,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         return results
 
     def _compute_decoder_metrics(
-        self, *, config: Dict[str, Any], encoder_params: EncoderTestParams, encoder_metrics, epoch: Optional[int]
+        self, *, config: dict[str, Any], encoder_params: EncoderTestParams, encoder_metrics, epoch: int | None
     ):
         decoder_config = config.get("decoder_metrics")
         if decoder_config is None:
@@ -2230,7 +2221,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         *,
         testset_name: str,
         config: Mapping[str, Any],
-        epoch: Optional[int],
+        epoch: int | None,
         skip_deqa: bool = False,
         skip_simple_vqa: bool = False,
     ):
@@ -2243,9 +2234,9 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
         if skip_simple_vqa:
             log_metrics = [name for name in log_metrics if "simple_vqa" not in name]
 
-        metrics = dict()
+        metrics = {}
         # SimpleVQA scoring failures are reported per clip as None; other metrics keep failing loudly.
-        simple_vqa_failures: Dict[str, int] = dict()
+        simple_vqa_failures: dict[str, int] = {}
         for ds in results.values():
             for s in ds.values():
                 for rate, r in enumerate(s.values()):
@@ -2253,7 +2244,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
                         name = f"{testset_name}_{metric_name}{rate:03d}"
                         value_list = metrics.get(name)
                         if value_list is None:
-                            metrics[name] = value_list = list()
+                            metrics[name] = value_list = []
 
                         value = r[metric_name] if metric_name in r else r[f"ave_{metric_name}"]
                         if value is None and "simple_vqa" in metric_name:
@@ -2281,7 +2272,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
                 step=epoch,
             )
 
-    def _log_ane_divergence_metrics(self, results, *, testset_name: str, epoch: Optional[int]):
+    def _log_ane_divergence_metrics(self, results, *, testset_name: str, epoch: int | None):
         """Log the ANE divergence metrics that need non-mean aggregation, per rate."""
         from collections import defaultdict
 
@@ -2368,9 +2359,8 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             factor = torch.pow(bpp_target / bpp, k_p).item()
 
             min_threshold = self.get_config_by_path("train.controller.min_threshold", default=None)
-            if min_threshold is not None:
-                if abs(factor - 1) < min_threshold:
-                    factor = 1
+            if min_threshold is not None and abs(factor - 1) < min_threshold:
+                factor = 1
             return factor
 
         k_p = self.get_config_by_path("train.controller.gain", default=1.0e-2)
@@ -2416,9 +2406,8 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             self.training_lambdas = torch.from_numpy(lambdas).float()
 
         control_at_step = self.get_config_by_path("train.controller.at_step", default=False)
-        if controller_active:
-            if not control_at_step:
-                self.control_lambdas()
+        if controller_active and not control_at_step:
+            self.control_lambdas()
 
         assert self.lambda_min is not None and self.lambda_max is not None
         min_lmd = round(self.lambda_min, 2)

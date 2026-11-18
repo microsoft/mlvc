@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import atexit
-import threading
-import importlib.metadata
-from pathlib import Path
 import faulthandler
+import importlib.metadata
+import threading
+from contextlib import AbstractContextManager
+from pathlib import Path
 
 faulthandler.enable()
 
@@ -16,7 +17,7 @@ class WindowsMLRuntime:
     def __init__(self) -> None:
         self._initialized = False
         self._lock = threading.Lock()
-        self._win_app_sdk_handle: object | None = None
+        self._win_app_sdk_handle: AbstractContextManager[object] | None = None
 
     @staticmethod
     def _is_winml_installed() -> bool:
@@ -52,15 +53,15 @@ class WindowsMLRuntime:
 
     def _shutdown(self) -> None:
         if self._win_app_sdk_handle is not None:
-            self._win_app_sdk_handle.__exit__(None, None, None)  # type: ignore
+            self._win_app_sdk_handle.__exit__(None, None, None)
             self._win_app_sdk_handle = None
 
     def _bootstrap(self) -> None:
-        import winui3.microsoft.windows.applicationmodel.dynamicdependency.bootstrap as bootstrap  # type: ignore[import-not-found]
-        from winui3 import (  # type: ignore[import-not-found]
+        import winui3.microsoft.windows.ai.machinelearning as winml
+        from winui3 import (
             _winui3_microsoft_windows_applicationmodel_dynamicdependency_bootstrap as bootstrap_impl,
         )
-        import winui3.microsoft.windows.ai.machinelearning as winml  # type: ignore[import-not-found]
+        from winui3.microsoft.windows.applicationmodel.dynamicdependency import bootstrap
 
         # Print Windows app SDK versions
         wasdk_version = importlib.metadata.version(
@@ -79,7 +80,7 @@ class WindowsMLRuntime:
         self._win_app_sdk_handle = bootstrap.initialize(
             options=bootstrap.InitializeOptions.ON_NO_MATCH_SHOW_UI,
         )
-        self._win_app_sdk_handle.__enter__()  # type: ignore[union-attr]
+        self._win_app_sdk_handle.__enter__()
         atexit.register(self._shutdown)
 
         # Ensure WindowsML execution providers are ready
@@ -95,7 +96,7 @@ class WindowsMLRuntime:
                 f" library_path={provider.library_path}"
             )
 
-        import onnxruntime as ort  # type: ignore[import-not-found]
+        import onnxruntime as ort
 
         print(
             f"Loaded Windows App Runtime version: {self._get_runtime_version()}, ONNX Runtime version: {ort.__version__}"
@@ -140,7 +141,7 @@ class WindowsMLRuntime:
         import ctypes
 
         try:
-            dll = ctypes.WinDLL("Microsoft.WindowsAppRuntime.Insights.Resource.dll")  # type: ignore[reportAttributeAccessIssue]
+            dll = ctypes.WinDLL("Microsoft.WindowsAppRuntime.Insights.Resource.dll")
 
             class _Version(ctypes.Structure):
                 _fields_ = [

@@ -4,6 +4,7 @@
 """ANE arithmetic simulation as a TorchFunctionMode."""
 
 import contextlib
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -60,7 +61,7 @@ class ANESimMode(torch.overrides.TorchFunctionMode):
             self._leaky_relu = lambda x, s: A.ane_leaky_relu(x, s).float()
             self._conv_exact = lambda i, w, b, **k: A.ane_conv2d(i, w, b, **k).float()
 
-    def __torch_function__(self, func, types, args=(), kwargs=None):
+    def __torch_function__(self, func, types, args: tuple[Any, ...] = (), kwargs: dict[str, Any] | None = None):
         kwargs = kwargs or {}
         name = getattr(func, "__name__", "")
         sim = self.simu

@@ -1,10 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from pathlib import Path
-from typing import List
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 from torch import nn
@@ -68,9 +67,8 @@ class PerceptualModel(nn.Module):
 
         self.scaling_layer = ScalingLayer()
 
-        if self.config.use_lpips_aggregation:
-            if self.config.use_lpips_weights:
-                self._init_lpips_model()
+        if self.config.use_lpips_aggregation and self.config.use_lpips_weights:
+            self._init_lpips_model()
 
         self.eval()
 
@@ -129,7 +127,7 @@ class PerceptualModel(nn.Module):
     def upsample(in_tens, out_HW=(64, 64)):  # assumes scale factor is same for H and W
         return nn.Upsample(size=out_HW, mode="bilinear", align_corners=False)(in_tens)
 
-    def extract_base_model_features(self, x) -> List[torch.Tensor]:
+    def extract_base_model_features(self, x) -> list[torch.Tensor]:
         if self.config.normalize_input is True:
             inp = self._normalize_input(x)
         else:
@@ -217,7 +215,7 @@ if __name__ == "__main__":
     x1.grad.zero_()
     x2.grad.zero_()
 
-    import lpips  # type: ignore[import-not-found]
+    import lpips
 
     loss_lpips = lpips.LPIPS(net="vgg", lpips=True)
     out_lpips = loss_lpips(x1, x2, normalize=True)

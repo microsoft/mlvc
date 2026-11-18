@@ -6,7 +6,7 @@ import sys
 from . import _msrtc_rans
 from .types import RansVariant
 
-__all__ = ["RansVariant", "RansEncoderStream", "RansDecoderStream", "EntropyEncoder", "EntropyDecoder"]
+__all__ = ["EntropyDecoder", "EntropyEncoder", "RansDecoderStream", "RansEncoderStream", "RansVariant"]
 
 RansEncoderStream = _msrtc_rans.RansEncoderStream
 RansDecoderStream = _msrtc_rans.RansDecoderStream

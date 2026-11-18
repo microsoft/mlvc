@@ -1,9 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import numpy as np
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+
+import numpy as np
 
 
 class FrameType(str, Enum):
@@ -338,13 +339,11 @@ class RateController:
         *,
         max_q_index_increase: int | None = None,
         max_q_index_decrease: int | None = None,
-        frame_weights: dict[FrameType, float] = {
-            FrameType.I_FRAME: 10.0,
-            FrameType.LTR_RECOVERY: 6.0,
-            FrameType.P_FRAME: 1.0,
-        },
+        frame_weights: dict[FrameType, float] | None = None,
         frame_weight_tau: float = 2.0,
     ):
+        if frame_weights is None:
+            frame_weights = {FrameType.I_FRAME: 10.0, FrameType.LTR_RECOVERY: 6.0, FrameType.P_FRAME: 1.0}
         self._image_width = image_width
         self._image_height = image_height
         self._rate_alloc = RateAllocator(bitrate=bitrate, fps=fps)
@@ -378,8 +377,7 @@ class RateController:
     ) -> int | None:
         # Frame weight (decay + update)
         frame_weight = self._prev_frame_weight + (1.0 / self._frame_weight_tau) * (1.0 - self._prev_frame_weight)
-        if self._frame_weights[frame_type] > frame_weight:
-            frame_weight = self._frame_weights[frame_type]
+        frame_weight = max(frame_weight, self._frame_weights[frame_type])
 
         # Disable undershoot correction for intra and LTR-recovery frames
         undershoot_tau = 100.0 if frame_type in [FrameType.I_FRAME, FrameType.LTR_RECOVERY] else None
