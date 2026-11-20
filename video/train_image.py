@@ -33,15 +33,7 @@ class TrainImageApp(BaseTrainVideoApp):
         super().prepare_for_epoch(epoch)
 
         config = self.get_config_by_path("train", expected_type=dict)
-        lr = config["learning_rate"]
         loss_type = config["loss_type"]
-
-        assert self.optimizer is not None
-        for g in self.optimizer.param_groups:
-            g["lr"] = lr
-
-        if self.rank <= 0:
-            self.metrics_writer.add_scalar("lr", lr, epoch)
 
         model = self.get_unwrapped_model(self.model)
         self.initialize_lambdas(model)
@@ -57,6 +49,8 @@ class TrainImageApp(BaseTrainVideoApp):
             distortion_loss_weight=config.get("distortion_loss_weight"),
             roi_weight=config.get("roi_weight"),
             perceptual_rgb_weight=config.get("perceptual_rgb_weight"),
+            grid_loss_weight=config.get("grid_loss_weight"),
+            grid_chroma_weight=config.get("grid_chroma_weight"),
         )
 
     def train_step(self, epoch, step, batch):

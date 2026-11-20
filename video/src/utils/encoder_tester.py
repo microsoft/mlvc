@@ -20,6 +20,7 @@ import torch.utils.data
 from PIL import Image
 from torch import nn
 
+from ..metrics.grid_artifacts import grid_ratio_db
 from ..metrics.msssim import MS_SSIM
 from ..metrics.vif import VIF
 from ..models.segment import FaRLModel
@@ -64,6 +65,7 @@ class EncoderTestParams:
     calc_ssim_rgb: bool = False
     calc_vif: bool = False
     calc_lpips: bool = False
+    calc_grid_artifacts: bool = False
     calc_lrwer_rgb: bool = False
     calc_deqa_score_rgb: bool = False
     calc_simple_vqa: bool = False
@@ -1211,7 +1213,7 @@ class EncoderTestTaskProcessor:
             rgb = image
             rgb_rec = x_hat
 
-            if params.calc_psnr or params.calc_ssim or params.calc_vif:
+            if params.calc_psnr or params.calc_ssim or params.calc_vif or params.calc_grid_artifacts:
                 y, u, v = yuv_444_to_420(rgb2ycbcr(rgb))
                 y_rec, u_rec, v_rec = yuv_444_to_420(rgb2ycbcr(rgb_rec))
             else:
@@ -1312,6 +1314,16 @@ class EncoderTestTaskProcessor:
             lpips = self._lpips(rgb_rec, rgb)
             self._add_frame_stat("lpips", lpips)
             extra_stats["LPIPS"] = lpips
+
+        if params.calc_grid_artifacts:
+            assert y is not None and y_rec is not None and u is not None and u_rec is not None
+            assert v is not None and v_rec is not None
+            # the grid is 8x8 in luma and 4x4 in 4:2:0 chroma
+            grid_y = grid_ratio_db(y_rec - y, period=8, tile=64)
+            grid_uv = (grid_ratio_db(u_rec - u, period=4, tile=32) + grid_ratio_db(v_rec - v, period=4, tile=32)) / 2
+            self._add_frame_stat("grid_residual_y", grid_y)
+            self._add_frame_stat("grid_residual_uv", grid_uv)
+            extra_stats["Grid residual(Y)"] = grid_y
 
         if self.rec_frame_writer_list is not None:
             if params.is_yuv420:
