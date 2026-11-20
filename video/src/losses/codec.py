@@ -11,6 +11,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from ..metrics.grid_artifacts import grid_pattern_energy
 from ..metrics.msssim import MS_SSIM
 from ..transforms.functional import rgb2ycbcr, ycbcr2rgb, yuv_444_to_420
 from ..utils.common import AuxiliaryModels, downsample_mask
@@ -432,6 +433,8 @@ class BasePerceptualFrameLoss(BaseMSEFrameLoss, abc.ABC):
         distortion_loss_weight: float,
         perceptual_loss_weight: float,
         perceptual_rgb_weight: float | None,
+        grid_loss_weight: float | None = None,
+        grid_chroma_weight: float | None = None,
     ):
         super().__init__(
             is_yuv420=is_yuv420,
@@ -456,6 +459,21 @@ class BasePerceptualFrameLoss(BaseMSEFrameLoss, abc.ABC):
 
         self.perceptual_rgb_weight = perceptual_rgb_weight
         self.is_yuv420 = is_yuv420
+
+        self.grid_loss_weight = float(grid_loss_weight) if grid_loss_weight is not None else 0.0
+        self.grid_chroma_weight = float(grid_chroma_weight) if grid_chroma_weight is not None else 8.0
+        if self.grid_loss_weight < 0 or self.grid_chroma_weight < 0:
+            raise ValueError(f"Invalid grid_loss_weight {grid_loss_weight} or grid_chroma_weight {grid_chroma_weight}")
+
+    def _calc_frame_grid(self, target: torch.Tensor, x_hat: torch.Tensor) -> torch.Tensor:
+        """Grid pattern energy of ``x_hat - target`` at 4:2:0: luma weighted 8, each chroma plane grid_chroma_weight."""
+        if not self.is_yuv420:
+            target, x_hat = rgb2ycbcr(target), rgb2ycbcr(x_hat)
+        y, u, v = yuv_444_to_420(x_hat - target)
+        energy_y = grid_pattern_energy(y, period=8, tile=64)[:, 0]
+        # 4:2:0 chroma has the grid every 4 pixels
+        energy_uv = grid_pattern_energy(torch.cat([u, v], dim=1), period=4, tile=32).sum(dim=1)
+        return 3 * (8 * energy_y + self.grid_chroma_weight * energy_uv) / 10
 
     def _calc_frame_perceptual(
         self,
@@ -517,15 +535,13 @@ class loss_total_rdc_perceptual(BasePerceptualFrameLoss):
 
         total = self.distortion_loss_weight * mse + self.perceptual_loss_weight * perceptual
 
-        return FrameLossComponents(
-            recon=total,
-            bpp=rd["bpp"],
-            stats={
-                "mse": mse,
-                "perceptual": perceptual,
-                "psnr": self.calc_psnr(mse),
-            },
-        )
+        stats = {"mse": mse, "perceptual": perceptual, "psnr": self.calc_psnr(mse)}
+        if self.grid_loss_weight != 0:
+            grid = self._calc_frame_grid(target, rd["x_hat"])
+            total = total + self.grid_loss_weight * grid
+            stats["grid"] = grid
+
+        return FrameLossComponents(recon=total, bpp=rd["bpp"], stats=stats)
 
 
 class loss_total_rdc_psnr_roi_per_pixel(BaseMSEFrameLoss):
@@ -594,6 +610,8 @@ class loss_total_rdc_perceptual_roi_per_pixel(BasePerceptualFrameLoss):
         roi_bg_ratio: float,
         p_roi: float | None = None,
         segmentation_model: nn.Module,
+        grid_loss_weight: float | None = None,
+        grid_chroma_weight: float | None = None,
     ):
         super().__init__(
             is_yuv420=is_yuv420,
@@ -605,6 +623,8 @@ class loss_total_rdc_perceptual_roi_per_pixel(BasePerceptualFrameLoss):
             distortion_loss_weight=distortion_loss_weight,
             perceptual_loss_weight=perceptual_loss_weight,
             perceptual_rgb_weight=perceptual_rgb_weight,
+            grid_loss_weight=grid_loss_weight,
+            grid_chroma_weight=grid_chroma_weight,
         )
 
         if roi_bg_ratio is None:
@@ -640,16 +660,18 @@ class loss_total_rdc_perceptual_roi_per_pixel(BasePerceptualFrameLoss):
 
         final = self.distortion_loss_weight * mse_masked + self.perceptual_loss_weight * perceptual_masked
 
-        return FrameLossComponents(
-            recon=final,
-            bpp=bpp,
-            stats={
-                "final": final,
-                "mask_proba": mask_proba,
-                "mse_masked": mse_masked,
-                "perceptual_masked": perceptual_masked,
-            },
-        )
+        stats = {
+            "final": final,
+            "mask_proba": mask_proba,
+            "mse_masked": mse_masked,
+            "perceptual_masked": perceptual_masked,
+        }
+        if self.grid_loss_weight != 0:
+            grid = self._calc_frame_grid(target, rd["x_hat"])
+            final = final + self.grid_loss_weight * grid
+            stats.update(final=final, grid=grid)
+
+        return FrameLossComponents(recon=final, bpp=bpp, stats=stats)
 
 
 class BaseMSSSIMFrameLoss(BaseFrameLoss, abc.ABC):
@@ -706,6 +728,8 @@ def get_loss_func(
     perceptual_rgb_weight: float | None = None,
     roi_bg_ratio: float | None = None,
     p_roi: float | None = None,
+    grid_loss_weight: float | None = None,
+    grid_chroma_weight: float | None = None,
 ):
     frame_loss_name = f"loss_{loss_type}"
     frame_loss_type = globals().get(frame_loss_name)
@@ -713,6 +737,8 @@ def get_loss_func(
         raise ValueError(f"loss {loss_type} is not defined")
 
     arg_names = set(inspect.signature(frame_loss_type).parameters.keys())
+    if grid_loss_weight and "grid_loss_weight" not in arg_names:
+        raise ValueError(f"Loss {loss_type!r} does not support grid_loss_weight (only the perceptual losses do)")
 
     def get_init_args(**kwargs):
         return {name: value for name, value in kwargs.items() if name in arg_names}
@@ -729,6 +755,8 @@ def get_loss_func(
         perceptual_rgb_weight=perceptual_rgb_weight,
         roi_bg_ratio=roi_bg_ratio,
         p_roi=p_roi,
+        grid_loss_weight=grid_loss_weight,
+        grid_chroma_weight=grid_chroma_weight,
     )
 
     if "optic_flow_loss" in arg_names:

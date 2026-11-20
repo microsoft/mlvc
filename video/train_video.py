@@ -343,7 +343,9 @@ class TrainVideoApp(BaseTrainVideoApp):
         else:
             kwargs = kwargs.copy()
 
-        kwargs["lr"] = self.get_config_by_path("train.learning_rate", expected_type=numbers.Real)
+        kwargs["lr"] = self.get_learning_rate(
+            self.get_config_by_path("train.start_epoch", default=0, expected_type=numbers.Real)
+        )
 
         optimizer_type = self.get_config_by_path("train.optimizer.type", default="AdamW", expected_type=str)
         optimizer_type = getattr(torch.optim, optimizer_type)
@@ -521,23 +523,13 @@ class TrainVideoApp(BaseTrainVideoApp):
 
         config = self.get_config_by_path("train", expected_type=dict)
 
-        lr = config["learning_rate"]
         param_group = config.get("param_group", None)
         loss_type = config["loss_type"]
         is_cascaded = config["cascade"]
         is_rand_rate = config["random_rate"]
         transfer_weights = config["transfer_weights"]
 
-        for g in self.optimizer.param_groups:
-            if is_cascaded:
-                g["lr"] = lr * g.get("ratio", 1)
-            else:
-                g["lr"] = lr
-
         self._update_optimizer_params()
-
-        if self.rank <= 0:
-            self.metrics_writer.add_scalar("lr", lr, epoch)
 
         self.drift_loss_weight = float(config.get("drift_loss_weight", 0.0))
         self.drift_feature_loss_weight = float(config.get("drift_feature_loss_weight", 0.0))
@@ -614,6 +606,8 @@ class TrainVideoApp(BaseTrainVideoApp):
             "perceptual_rgb_weight": config.get("perceptual_rgb_weight"),
             "roi_bg_ratio": config.get("roi_bg_ratio"),
             "p_roi": config.get("p_roi"),
+            "grid_loss_weight": config.get("grid_loss_weight"),
+            "grid_chroma_weight": config.get("grid_chroma_weight"),
         }
         # A compiled loss is guarded on the loss module: keep it while its configuration is unchanged, and drop the
         # graphs compiled with the previous one when it changes.
@@ -902,6 +896,14 @@ class TrainVideoApp(BaseTrainVideoApp):
             self._optic_flow_loss = optic_flow_loss = OpticFlowLoss(optic_flow)
 
         return optic_flow_loss
+
+    def set_learning_rate(self, lr: float):
+        assert self.optimizer is not None
+        self._learning_rate = lr
+        # in cascaded training, per-group ratios scale the learning rate (e.g. 0.01 for motion estimation)
+        is_cascaded = self.get_config_by_path("train.cascade", expected_type=bool)
+        for g in self.optimizer.param_groups:
+            g["lr"] = lr * g.get("ratio", 1) if is_cascaded else lr
 
     def _update_optimizer_params(self):
         params = self.get_config_by_path("train.optimizer.params", default=None)

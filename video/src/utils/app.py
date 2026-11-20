@@ -51,6 +51,7 @@ from .common import (
     write_epoch_marker,
 )
 from .encoder_tester import EncoderTestParams, run_encoder_test
+from .lr_policy import LRPolicy, create_lr_policy
 from .mount_point import MountPointResolver
 from .profiling import summarize_model_layers
 from .qp_matcher import match_q_index_lists
@@ -872,6 +873,8 @@ class BaseTrainApp(BaseApp):
         self.model = None
         self.optimizer = None
         self.grad_norm_tracker = None
+        self._lr_policy: LRPolicy | None = None
+        self._learning_rate: float | None = None
 
         self._train_dataloader = None
         self._device = None
@@ -1076,6 +1079,10 @@ class BaseTrainApp(BaseApp):
         return grad_norm_tracker
 
     def initialize_train(self, model_state, train_state):
+        self._lr_policy = self.create_lr_policy()
+        if self._lr_policy is not None:
+            logging.info(f"Learning rate policy: {self._lr_policy}")
+
         model = self.load_model(model_state)
         train_config = self.config["train"]
         model = self.disable_grad_for_modules(model, modules_to_train=train_config.get("modules_to_train"))
@@ -1125,7 +1132,10 @@ class BaseTrainApp(BaseApp):
 
     def get_immutable_config_keys(self) -> tuple[str, ...]:
         """Config keys that a training schedule must not change."""
-        return ()
+        # the learning rate policy is built once, when training starts, and replaces train.learning_rate
+        if self.get_config_by_path("train.lr_policy", default=None) is None:
+            return ("train.lr_policy",)
+        return ("train.lr_policy", "train.learning_rate")
 
     @property
     def train_dataloader(self):
@@ -1329,6 +1339,28 @@ class BaseTrainApp(BaseApp):
         self._step_info_timestamp = time.time()
         self.reset_step_info()
 
+    def create_lr_policy(self) -> LRPolicy | None:
+        config = self.get_config_by_path("train.lr_policy", default=None)
+        if config is None:
+            return None
+        start_epoch = self.get_config_by_path("train.start_epoch", default=0, expected_type=numbers.Real)
+        return create_lr_policy(config, start_epoch=start_epoch)
+
+    def get_learning_rate(self, epoch: float, step: int | None = None) -> float:
+        """Learning rate at the start of ``epoch``, or for ``step`` of it."""
+        policy = self._lr_policy
+        if policy is None:
+            return self.get_config_by_path("train.learning_rate", expected_type=numbers.Real)
+        if step is None:
+            return policy.lr_at(epoch)
+        return policy.lr_at(epoch + (step + 1) / max(self.epoch_steps, 1))
+
+    def set_learning_rate(self, lr: float):
+        assert self.optimizer is not None
+        self._learning_rate = lr
+        for group in self.optimizer.param_groups:
+            group["lr"] = lr
+
     @staticmethod
     def get_ddp_sync_steps(epoch_steps):
         ddp_sync_period = 2000
@@ -1376,6 +1408,8 @@ class BaseTrainApp(BaseApp):
                 else:
                     raise ValueError(f"Unsupported batch type: {type(d)}")
                 try:
+                    if self._lr_policy is not None:
+                        self.set_learning_rate(self.get_learning_rate(epoch, step))
                     self.train_step(epoch, step, d)
                     processed += 1
                 except NonFiniteGradError:
@@ -1549,8 +1583,10 @@ class BaseTrainApp(BaseApp):
         logging.info(f"Epoch {epoch}: [{processed}/{n_samples} ({percent:.0f}%)] time: {t1 - t0:.1f}s,\t{info}")
 
     def get_step_info(self):
-        lr = self.get_config_by_path("train.learning_rate")
-        return {"lr": f"{lr:.6f}"}
+        lr = self._learning_rate
+        if lr is None:
+            lr = self.get_config_by_path("train.learning_rate")
+        return {"lr": f"{lr:.6f}" if lr >= 1e-5 else f"{lr:.2e}"}
 
     def reset_step_info(self):
         pass
@@ -1696,6 +1732,14 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
     @property
     def is_yuv420(self):
         return bool(self.model_config["yuv420"])
+
+    def prepare_for_epoch(self, epoch):
+        super().prepare_for_epoch(epoch)
+
+        lr = self.get_learning_rate(epoch, step=0)
+        self.set_learning_rate(lr)
+        if self.rank <= 0:
+            self.metrics_writer.add_scalar("lr", lr, epoch)
 
     def get_config_keys_with_training_schedule(self):
         key_list: list[str] = list(super().get_config_keys_with_training_schedule())
@@ -1908,6 +1952,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             calc_psnr_roi=config.get("calc_psnr_roi", False),
             calc_vif=config.get("calc_vif", False),
             calc_lpips=config.get("calc_lpips", False),
+            calc_grid_artifacts=config.get("calc_grid_artifacts", False),
             calc_lrwer_rgb=config.get("calc_lrwer_rgb", False),
             calc_deqa_score_rgb=self.is_testset_deqa_epoch(config, epoch),
             calc_simple_vqa=self.is_testset_simple_vqa_epoch(config, epoch),
@@ -2190,6 +2235,7 @@ class BaseTrainVideoApp(BaseTrainApp, abc.ABC):
             calc_ssim=decoder_config.get("calc_ssim", encoder_params.calc_ssim),
             calc_ssim_rgb=decoder_config.get("calc_ssim_rgb", encoder_params.calc_ssim_rgb),
             calc_vif=decoder_config.get("calc_vif", encoder_params.calc_vif),
+            calc_grid_artifacts=decoder_config.get("calc_grid_artifacts", encoder_params.calc_grid_artifacts),
             calc_simple_vqa=self.is_testset_simple_vqa_epoch(config, epoch, decoder=True),
             calc_hrd_metrics=decoder_config.get("calc_hrd_metrics", encoder_params.calc_hrd_metrics),
             frame_rate=decoder_config.get("frame_rate", encoder_params.frame_rate),

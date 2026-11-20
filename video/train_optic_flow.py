@@ -83,20 +83,6 @@ class TrainFlowApp(BaseTrainVideoApp):
             frame_num=config["n_frames"],
         )
 
-    def prepare_for_epoch(self, epoch):
-        super().prepare_for_epoch(epoch)
-
-        config = self.get_config_by_path("train", expected_type=dict)
-        lr = config["learning_rate"]
-        # loss_type = config["loss_type"]
-
-        assert self.optimizer is not None
-        for g in self.optimizer.param_groups:
-            g["lr"] = lr
-
-        if self.rank <= 0:
-            self.metrics_writer.add_scalar("lr", lr, epoch)
-
     def train_step(self, epoch, step, batch):
         assert self.optimizer is not None
         self.optimizer.zero_grad()
